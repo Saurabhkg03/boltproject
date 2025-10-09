@@ -5,12 +5,12 @@ export interface Question {
   topic: string;
   // These are the fields from your seed script
   question_html: string;
-  question_images?: string[]; // To hold clean image URLs
+  question_image_links?: string[]; // To hold clean image URLs
   explanation_html: string;
-  explanation_images?: string[]; // To hold clean explanation image URLs
+  explanation_image_links?: string[]; // To hold clean explanation image URLs
   options: {
     label: string;
-    text: string;
+    text_html: string; // RENAMED: Changed from 'text' to 'text_html' to match seeder
     is_correct: boolean;
   }[];
   correctAnswerLabel: string;
@@ -22,6 +22,8 @@ export interface Question {
   // These can be calculated later
   accuracy?: number;
   attempts?: number;
+  question_type: 'mcq' | 'nat' | 'msq'; // Add this
+  nat_answer?: string; // And this
 }
 
 export interface User {
@@ -43,4 +45,5 @@ export interface Submission {
   correct: boolean;
   timestamp: string;
   selectedOption: string;
+  natAnswer?: string; // Add this for NAT answers
 }

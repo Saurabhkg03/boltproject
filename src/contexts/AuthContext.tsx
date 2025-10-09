@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, ReactNode, useEffect } from 'react';
+import { createContext, useContext, useState, ReactNode, useEffect, Dispatch, SetStateAction } from 'react';
 import { 
   onAuthStateChanged, 
   createUserWithEmailAndPassword, 
@@ -8,13 +8,14 @@ import {
   signInWithPopup,
   User as FirebaseUser 
 } from 'firebase/auth';
-import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { auth, db } from '../firebase';
 import { User } from '../data/mockData';
 
 interface AuthContextType {
   user: FirebaseUser | null;
   userInfo: User | null;
+  setUserInfo: Dispatch<SetStateAction<User | null>>; // Added this
   login: (email: string, password: string) => Promise<void>;
   signup: (name: string, email: string, password: string) => Promise<void>;
   loginWithGoogle: () => Promise<void>;
@@ -34,7 +35,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
       if (currentUser) {
-        // Fetch user profile from Firestore
         const userDocRef = doc(db, 'users', currentUser.uid);
         const userDocSnap = await getDoc(userDocRef);
         if (userDocSnap.exists()) {
@@ -57,7 +57,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const newUser: User = {
       uid: userCredential.user.uid,
       name,
-      email: email, // Use the provided email
+      email: email,
       joined: new Date().toISOString(),
       stats: {
         attempted: 0,
@@ -66,7 +66,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
       avatar: userCredential.user.photoURL || ''
     };
-    // Save user data to Firestore
     await setDoc(doc(db, 'users', newUser.uid), newUser);
     setUserInfo(newUser);
   };
@@ -76,12 +75,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const userCredential = await signInWithPopup(auth, provider);
     const user = userCredential.user;
 
-    // Check if user already exists in Firestore
     const userDocRef = doc(db, 'users', user.uid);
     const userDocSnap = await getDoc(userDocRef);
 
     if (!userDocSnap.exists()) {
-      // If user is new, create a new document in Firestore
       const newUser: User = {
         uid: user.uid,
         name: user.displayName || 'Anonymous',
@@ -99,7 +96,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-
   const logout = () => {
     signOut(auth);
   };
@@ -108,6 +104,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     <AuthContext.Provider value={{
       user,
       userInfo,
+      setUserInfo, // Added this
       login,
       signup,
       loginWithGoogle,
