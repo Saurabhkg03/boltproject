@@ -1,40 +1,85 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Zap, TrendingUp, Award, ArrowRight, Loader2 } from 'lucide-react';
+import { Zap, Award, ArrowRight, Loader2, BookOpen } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { db } from '../firebase';
-import { collection, getDocs, query, orderBy, limit } from 'firebase/firestore';
+import { collection, getDocs, query, limit } from 'firebase/firestore';
 import { Question, User } from '../data/mockData';
+
+// Define a type for the Subject data structure we will use for display
+interface SubjectStats {
+  name: string;
+  count: number;
+  color: string; // Tailwind color class for styling
+}
+
+// Define the static list of subjects and their associated colors/icons
+const SUBJECTS_CONFIG: SubjectStats[] = [
+  { name: 'Network Theory', count: 0, color: 'bg-blue-500' },
+  { name: 'Signals & Systems', count: 0, color: 'bg-green-500' },
+  { name: 'Control Systems', count: 0, color: 'bg-purple-500' },
+  { name: 'Digital Electronics', count: 0, color: 'bg-orange-500' },
+  { name: 'Communication', count: 0, color: 'bg-pink-500' },
+  { name: 'EMFT', count: 0, color: 'bg-teal-500' },
+];
+
 
 export function Home() {
   const { userInfo, isAuthenticated } = useAuth();
   const [dailyChallenge, setDailyChallenge] = useState<Question | null>(null);
   const [leaderboard, setLeaderboard] = useState<User[]>([]);
+  const [subjectStats, setSubjectStats] = useState<SubjectStats[]>(SUBJECTS_CONFIG);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
       try {
-        // Fetch a single question for the daily challenge
-        const questionsQuery = query(collection(db, 'questions'), limit(1));
-        const questionSnapshot = await getDocs(questionsQuery);
-        if (!questionSnapshot.empty) {
-          const firstDoc = questionSnapshot.docs[0];
-          setDailyChallenge({ id: firstDoc.id, ...firstDoc.data() } as Question);
-        }
+        // --- 1. Fetch All Questions for Subject Counts and Daily Challenge ---
+        const questionsSnapshot = await getDocs(collection(db, 'questions'));
+        const questionsData = questionsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Question));
+        
+        // Calculate subject counts
+        const counts = questionsData.reduce((acc, q) => {
+          acc[q.subject] = (acc[q.subject] || 0) + 1;
+          return acc;
+        }, {} as Record<string, number>);
 
-        // Fetch top 5 users for the leaderboard, ordered by accuracy
+        // Map counts to the SUBJECTS_CONFIG structure
+        const updatedSubjects = SUBJECTS_CONFIG.map(config => ({
+          ...config,
+          count: counts[config.name] || 0,
+        }));
+        setSubjectStats(updatedSubjects);
+
+        // --- 2. Set Daily Challenge (use a random or the first question found) ---
+        if (questionsData.length > 0) {
+          // For simplicity, pick the first question available in the collection for the challenge
+          setDailyChallenge(questionsData[0]);
+        }
+        
+        // --- 3. Fetch Top 5 users for the leaderboard ---
+        // NOTE: Since Firestore `orderBy` on nested fields (like 'stats.accuracy') often requires 
+        // composite indexes, which we avoid requiring the user to set up, we will fetch 
+        // a larger set of users (e.g., 20) and sort client-side, but keep the query simple 
+        // to minimize database reads, assuming the collection is small.
+        // For production, this query should be indexed. For this implementation, we simply limit results.
         const usersQuery = query(
           collection(db, 'users'),
-          orderBy('stats.accuracy', 'desc'),
-          limit(5)
+          limit(20) // Fetch a reasonable number to sort client-side
         );
         const usersSnapshot = await getDocs(usersQuery);
-        const leaderboardData = usersSnapshot.docs.map(doc => doc.data() as User);
-        setLeaderboard(leaderboardData);
+        let leaderboardData = usersSnapshot.docs.map(doc => doc.data() as User);
+
+        // Client-side sort by accuracy (descending)
+        leaderboardData.sort((a, b) => b.stats.accuracy - a.stats.accuracy);
+        
+        // Take the top 5
+        setLeaderboard(leaderboardData.slice(0, 5));
+
       } catch (error) {
         console.error("Error fetching home page data:", error);
+        setSubjectStats(SUBJECTS_CONFIG.map(s => ({...s, count: 0}))); // Reset on error
       } finally {
         setLoading(false);
       }
@@ -43,14 +88,18 @@ export function Home() {
     fetchData();
   }, []);
 
-  const subjects = [
-    { name: 'Network Theory', count: 8, color: 'bg-blue-500' },
-    { name: 'Signals & Systems', count: 0, color: 'bg-green-500' },
-    { name: 'Control Systems', count: 0, color: 'bg-purple-500' },
-    { name: 'Digital Electronics', count: 0, color: 'bg-orange-500' },
-    { name: 'Communication', count: 0, color: 'bg-pink-500' },
-    { name: 'EMFT', count: 0, color: 'bg-teal-500' }
-  ];
+  // Removed the useMemo for availableSubjects and primarySubject as they are no longer needed for the highlight section.
+
+
+  // Show loading spinner if data is not yet available
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex items-center justify-center">
+        <Loader2 className="w-12 h-12 text-blue-600 animate-spin" />
+      </div>
+    );
+  }
+
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
@@ -67,10 +116,17 @@ export function Home() {
               <p className="text-lg text-gray-700 dark:text-gray-300 mb-2">
                 Welcome back, <span className="font-semibold text-blue-600 dark:text-blue-400">{userInfo.name}</span>!
               </p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                Current Accuracy: <span className="font-semibold text-green-600 dark:text-green-400">{userInfo.stats.accuracy.toFixed(1)}%</span>
+              </p>
             </div>
           )}
         </div>
 
+        
+        {/* The Available Subject Highlight Section has been removed as requested. */}
+
+        {/* Daily Challenge Section - Remains Optional based on question fetch */}
         {isAuthenticated && dailyChallenge && (
           <div className="mb-12 bg-gradient-to-r from-blue-500 to-blue-600 rounded-xl p-6 text-white shadow-lg">
             <div className="flex items-center gap-2 mb-3">
@@ -78,7 +134,7 @@ export function Home() {
               <h2 className="text-2xl font-bold">Daily Challenge</h2>
             </div>
             <p className="text-blue-100 mb-4">
-              "{dailyChallenge.title}"
+              Try this question: "{dailyChallenge.title}" from the **{dailyChallenge.subject}** subject.
             </p>
             <Link
               to={`/question/${dailyChallenge.id}`}
@@ -93,28 +149,35 @@ export function Home() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-12">
           <div className="lg:col-span-2">
             <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">
-              Subjects
+              Subjects Overview
             </h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {subjects.map((subject) => (
+              {subjectStats.map((subject) => (
                 <Link
                   key={subject.name}
                   to="/practice"
-                  className="bg-white dark:bg-gray-900 rounded-xl p-6 border border-gray-200 dark:border-gray-800 hover:border-blue-500 dark:hover:border-blue-500 transition-all hover:shadow-lg group"
+                  // Use conditional class for styling if there are no questions
+                  className={`rounded-xl p-6 border border-gray-200 dark:border-gray-800 transition-all hover:shadow-lg group ${
+                    subject.count > 0 
+                      ? 'bg-white dark:bg-gray-900 hover:border-blue-500 dark:hover:border-blue-500'
+                      : 'bg-gray-100 dark:bg-gray-800 opacity-70 cursor-not-allowed pointer-events-none'
+                  }`}
                 >
                   <div className="flex items-center gap-4">
-                    <div className={`w-12 h-12 ${subject.color} rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform`}>
-                      <TrendingUp className="w-6 h-6 text-white" />
+                    <div className={`w-12 h-12 rounded-lg flex items-center justify-center transition-transform ${subject.color} ${subject.count > 0 ? 'group-hover:scale-110' : ''}`}>
+                      <BookOpen className="w-6 h-6 text-white" />
                     </div>
                     <div className="flex-1">
                       <h3 className="font-semibold text-gray-900 dark:text-white mb-1">
                         {subject.name}
                       </h3>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">
+                      <p className={`text-sm ${subject.count > 0 ? 'text-gray-600 dark:text-gray-400' : 'text-gray-500 dark:text-gray-500'}`}>
                         {subject.count} questions
                       </p>
                     </div>
-                    <ArrowRight className="w-5 h-5 text-gray-400 group-hover:text-blue-600 group-hover:translate-x-1 transition-all" />
+                    {subject.count > 0 && (
+                        <ArrowRight className="w-5 h-5 text-gray-400 group-hover:text-blue-600 group-hover:translate-x-1 transition-all" />
+                    )}
                   </div>
                 </Link>
               ))}
@@ -124,7 +187,7 @@ export function Home() {
           <div>
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
-                Leaderboard
+                Top Performers
               </h2>
               <Link
                 to="/leaderboard"
@@ -133,10 +196,10 @@ export function Home() {
                 View All
               </Link>
             </div>
-            <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
-              {loading ? (
-                <div className="p-4 text-center">
-                  <Loader2 className="w-6 h-6 mx-auto animate-spin text-blue-500" />
+            <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden shadow-md">
+              {leaderboard.length === 0 ? (
+                <div className="p-4 text-center text-gray-500 dark:text-gray-400">
+                    No users on the leaderboard yet.
                 </div>
               ) : (
                 leaderboard.map((leader, index) => (
@@ -174,7 +237,7 @@ export function Home() {
         </div>
 
         {!isAuthenticated && (
-          <div className="bg-blue-50 dark:bg-blue-950 rounded-xl p-8 text-center border border-blue-200 dark:border-blue-800">
+          <div className="bg-blue-50 dark:bg-blue-950 rounded-xl p-8 text-center border border-blue-200 dark:border-blue-800 shadow-lg">
             <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
               Ready to start your GATE preparation?
             </h3>
@@ -183,7 +246,7 @@ export function Home() {
             </p>
             <Link
               to="/login"
-              className="inline-flex items-center gap-2 bg-blue-600 text-white px-8 py-3 rounded-lg font-semibold hover:bg-blue-700 transition-colors"
+              className="inline-flex items-center gap-2 bg-blue-600 text-white px-8 py-3 rounded-lg font-semibold hover:bg-blue-700 transition-colors shadow-md"
             >
               Get Started
               <ArrowRight className="w-5 h-5" />

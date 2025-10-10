@@ -24,11 +24,14 @@ export interface Question {
   attempts?: number;
   question_type: 'mcq' | 'nat' | 'msq'; // Add this
   nat_answer?: string; // And this
+  verified: boolean; // To check if admin has verified the question
+  addedBy?: string; // UID of the moderator who added the question
 }
 
 export interface User {
   uid: string;
   name: string;
+  username: string;
   email: string;
   joined: string;
   stats: {
@@ -37,6 +40,8 @@ export interface User {
     accuracy: number;
   };
   avatar?: string;
+  role?: 'admin' | 'moderator' | 'user'; // Add user role
+  needsSetup?: boolean; // Flag to indicate if user needs to complete their profile
 }
 
 export interface Submission {

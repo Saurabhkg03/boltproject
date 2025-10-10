@@ -6,20 +6,22 @@ import {
   signOut, 
   GoogleAuthProvider,
   signInWithPopup,
-  User as FirebaseUser 
+  User as FirebaseUser,
+  deleteUser
 } from 'firebase/auth';
-import { doc, setDoc, getDoc } from 'firebase/firestore';
+import { doc, setDoc, getDoc, collection, query, where, getDocs, deleteDoc } from 'firebase/firestore';
 import { auth, db } from '../firebase';
 import { User } from '../data/mockData';
 
 interface AuthContextType {
   user: FirebaseUser | null;
   userInfo: User | null;
-  setUserInfo: Dispatch<SetStateAction<User | null>>; // Added this
+  setUserInfo: Dispatch<SetStateAction<User | null>>;
   login: (email: string, password: string) => Promise<void>;
-  signup: (name: string, email: string, password: string) => Promise<void>;
+  signup: (name: string, username: string, email: string, password: string) => Promise<void>;
   loginWithGoogle: () => Promise<void>;
   logout: () => void;
+  deleteAccount: () => Promise<void>;
   isAuthenticated: boolean;
   loading: boolean;
 }
@@ -52,11 +54,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await signInWithEmailAndPassword(auth, email, password);
   };
 
-  const signup = async (name: string, email: string, password: string) => {
+  const signup = async (name: string, username: string, email: string, password: string) => {
+    const saneUsername = username.toLowerCase().replace(/[^a-z0-9_]/g, '');
+    if (saneUsername.length < 3) {
+      throw new Error('Username must be at least 3 characters and contain only letters, numbers, or underscores.');
+    }
+    const usersRef = collection(db, 'users');
+    const q = query(usersRef, where('username', '==', saneUsername));
+    const querySnapshot = await getDocs(q);
+
+    if (!querySnapshot.empty) {
+      throw new Error('Username already exists. Please choose another one.');
+    }
+
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
     const newUser: User = {
       uid: userCredential.user.uid,
       name,
+      username: saneUsername,
       email: email,
       joined: new Date().toISOString(),
       stats: {
@@ -64,7 +79,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         correct: 0,
         accuracy: 0
       },
-      avatar: userCredential.user.photoURL || ''
+      avatar: userCredential.user.photoURL || '',
+      role: 'user',
+      needsSetup: false,
     };
     await setDoc(doc(db, 'users', newUser.uid), newUser);
     setUserInfo(newUser);
@@ -81,7 +98,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!userDocSnap.exists()) {
       const newUser: User = {
         uid: user.uid,
-        name: user.displayName || 'Anonymous',
+        name: user.displayName || 'New User',
+        username: `user_${user.uid.slice(-6)}`,
         email: user.email || '',
         joined: new Date().toISOString(),
         stats: {
@@ -89,10 +107,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           correct: 0,
           accuracy: 0,
         },
-        avatar: user.photoURL || ''
+        avatar: user.photoURL || '',
+        role: 'user',
+        needsSetup: true
       };
       await setDoc(userDocRef, newUser);
       setUserInfo(newUser);
+    } else {
+        setUserInfo(userDocSnap.data() as User);
     }
   };
 
@@ -100,15 +122,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     signOut(auth);
   };
 
+  const deleteAccount = async () => {
+    const currentUser = auth.currentUser;
+    if (!currentUser) {
+      throw new Error("No user is currently signed in.");
+    }
+    
+    try {
+      // Delete user document from Firestore
+      const userDocRef = doc(db, 'users', currentUser.uid);
+      await deleteDoc(userDocRef);
+
+      // Delete the user from Firebase Auth
+      await deleteUser(currentUser);
+      
+      setUserInfo(null);
+      setUser(null);
+
+    } catch (error) {
+      console.error("Error deleting account:", error);
+      throw error;
+    }
+  };
+
+
   return (
     <AuthContext.Provider value={{
       user,
       userInfo,
-      setUserInfo, // Added this
+      setUserInfo,
       login,
       signup,
       loginWithGoogle,
       logout,
+      deleteAccount,
       isAuthenticated: !!user,
       loading
     }}>

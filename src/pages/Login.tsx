@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Code2, Mail, Lock, User as UserIcon, Loader2 } from 'lucide-react';
+import { Code2, Mail, Lock, User as UserIcon, AtSign, Loader2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 const GoogleIcon = () => (
@@ -31,6 +31,7 @@ export function Login() {
 
   const [formData, setFormData] = useState({
     name: '',
+    username: '',
     email: '',
     password: ''
   });
@@ -47,7 +48,12 @@ export function Login() {
           setLoading(false);
           return;
         }
-        await signup(formData.name, formData.email, formData.password);
+        if (!formData.username.trim()) {
+            setError('Username is required');
+            setLoading(false);
+            return;
+        }
+        await signup(formData.name, formData.username, formData.email, formData.password);
       } else {
         await login(formData.email, formData.password);
       }
@@ -112,6 +118,24 @@ export function Login() {
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                     className="w-full pl-10 pr-4 py-3 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
                     placeholder="Enter your name"
+                    required={isSignup}
+                  />
+                </div>
+              </div>
+            )}
+            {isSignup && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Username
+                </label>
+                <div className="relative">
+                  <AtSign className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                  <input
+                    type="text"
+                    value={formData.username}
+                    onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+                    className="w-full pl-10 pr-4 py-3 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                    placeholder="Choose a unique username"
                     required={isSignup}
                   />
                 </div>

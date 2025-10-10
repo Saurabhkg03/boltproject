@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { Trophy, Award, TrendingUp, Target, Loader2 } from 'lucide-react';
 import { db } from '../firebase';
 import { collection, getDocs } from 'firebase/firestore';
 import { User } from '../data/mockData';
+import { getAvatarUrl } from '../utils';
 
 export function Leaderboard() {
   const [sortBy, setSortBy] = useState<'accuracy' | 'solved'>('accuracy');
@@ -28,13 +30,11 @@ export function Leaderboard() {
 
   const sortedLeaderboard = [...leaderboard].sort((a, b) => {
     if (sortBy === 'accuracy') {
-      // Sort by accuracy, then by number correct as a tie-breaker
       if (b.stats.accuracy !== a.stats.accuracy) {
         return b.stats.accuracy - a.stats.accuracy;
       }
       return b.stats.correct - a.stats.correct;
     } else {
-      // Sort by number correct, then by accuracy as a tie-breaker
       if (b.stats.correct !== a.stats.correct) {
         return b.stats.correct - a.stats.correct;
       }
@@ -46,7 +46,7 @@ export function Leaderboard() {
     if (rank === 1) return { color: 'bg-yellow-500', icon: '🏆', text: 'Gold' };
     if (rank === 2) return { color: 'bg-gray-400', icon: '🥈', text: 'Silver' };
     if (rank === 3) return { color: 'bg-orange-600', icon: '🥉', text: 'Bronze' };
-    return { color: 'bg-gray-200 dark:bg-gray-700', icon: ' challenger-icon ', text: 'Challenger' };
+    return { color: 'bg-gray-200 dark:bg-gray-700', icon: '', text: 'Challenger' };
   };
 
   if (loading) {
@@ -102,41 +102,7 @@ export function Leaderboard() {
             </div>
           </div>
         </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          {sortedLeaderboard.slice(0, 3).map((user, index) => {
-            const badge = getBadge(index + 1);
-            return (
-              <div
-                key={user.uid}
-                className={`bg-gradient-to-br ${
-                  index === 0
-                    ? 'from-yellow-400 to-yellow-600'
-                    : index === 1
-                    ? 'from-gray-300 to-gray-500'
-                    : 'from-orange-400 to-orange-600'
-                } rounded-xl p-6 text-white shadow-lg`}
-              >
-                <div className="text-center">
-                  <div className="text-4xl mb-2">{badge.icon}</div>
-                  <h3 className="font-bold text-xl mb-1">{user.name}</h3>
-                  <p className="text-sm opacity-90 mb-4">{badge.text} Badge</p>
-                  <div className="bg-white/20 backdrop-blur-sm rounded-lg p-3">
-                    <div className="flex justify-between items-center mb-2">
-                      <span className="text-sm">Accuracy</span>
-                      <span className="font-bold">{user.stats.accuracy.toFixed(1)}%</span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm">Solved</span>
-                      <span className="font-bold">{user.stats.correct}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
+        
         <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full">
@@ -157,9 +123,6 @@ export function Leaderboard() {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                     Attempted
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                    Badge
-                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
@@ -176,19 +139,17 @@ export function Leaderboard() {
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center text-white font-semibold">
-                            {user.name.charAt(0)}
-                          </div>
+                        <Link to={`/profile/${user.username}`} className="flex items-center gap-3 group">
+                           <img src={getAvatarUrl(user)} alt={user.name} className="w-10 h-10 rounded-full"/>
                           <div>
-                            <p className="font-medium text-gray-900 dark:text-white">
+                            <p className="font-medium text-gray-900 dark:text-white group-hover:text-blue-500">
                               {user.name}
                             </p>
                             <p className="text-sm text-gray-500 dark:text-gray-400">
-                              Joined {new Date(user.joined).toLocaleDateString()}
+                              @{user.username}
                             </p>
                           </div>
-                        </div>
+                        </Link>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center gap-2">
@@ -213,11 +174,6 @@ export function Leaderboard() {
                             {user.stats.attempted}
                           </span>
                         </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`px-3 py-1 rounded-full text-xs font-medium ${badge.color} ${index < 3 ? 'text-white' : 'text-gray-700 dark:text-gray-300'}`}>
-                          {badge.text}
-                        </span>
                       </td>
                     </tr>
                   );

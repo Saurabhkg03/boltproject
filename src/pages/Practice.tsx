@@ -1,13 +1,13 @@
 import { useState, useMemo, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Search, Filter, CheckCircle, Circle, Target, Loader2 } from 'lucide-react';
+import { Search, Filter, CheckCircle, Circle, Loader2, Edit } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { db } from '../firebase';
-import { collection, getDocs } from 'firebase/firestore';
+import { collection, getDocs, query, where } from 'firebase/firestore';
 import { Question, Submission } from '../data/mockData';
 
 export function Practice() {
-  const { user } = useAuth();
+  const { user, userInfo } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [difficultyFilter, setDifficultyFilter] = useState<string>('all');
   const [topicFilter, setTopicFilter] = useState<string>('all');
@@ -19,7 +19,12 @@ export function Practice() {
     const fetchQuestionsAndSubmissions = async () => {
       setLoading(true);
       try {
-        const querySnapshot = await getDocs(collection(db, "questions"));
+        // Show only verified questions to users. Admins/mods can see all.
+        const questionsQuery = (userInfo?.role === 'admin' || userInfo?.role === 'moderator') 
+          ? collection(db, "questions")
+          : query(collection(db, "questions"), where("verified", "==", true));
+
+        const querySnapshot = await getDocs(questionsQuery);
         const questionsData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Question));
         setQuestions(questionsData);
 
@@ -37,7 +42,7 @@ export function Practice() {
     };
 
     fetchQuestionsAndSubmissions();
-  }, [user]);
+  }, [user, userInfo]);
 
   const topics = useMemo(() => {
     const topicSet = new Set(questions.map(q => q.topic));
@@ -153,12 +158,19 @@ export function Practice() {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                     Difficulty
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                    Accuracy
-                  </th>
+                  {(userInfo?.role === 'admin' || userInfo?.role === 'moderator') && (
+                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Verified
+                     </th>
+                  )}
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                     Tags
                   </th>
+                  {(userInfo?.role === 'admin' || userInfo?.role === 'moderator') && (
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Actions
+                    </th>
+                  )}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
@@ -186,26 +198,24 @@ export function Practice() {
                         </Link>
                       </td>
                       <td className="px-6 py-4">
-                        <Link
-                          to={`/question/${question.id}`}
-                          className="text-gray-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400"
+                        <span
+                          className="text-gray-900 dark:text-white"
                         >
                           {question.topic}
-                        </Link>
+                        </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className={`px-3 py-1 rounded-full text-xs font-medium ${getDifficultyColor(question.difficulty)}`}>
                           {question.difficulty}
                         </span>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center gap-2">
-                          <Target className="w-4 h-4 text-gray-400" />
-                          <span className="text-sm text-gray-600 dark:text-gray-400">
-                            {question.accuracy ? `${question.accuracy.toFixed(1)}%` : 'N/A'}
-                          </span>
-                        </div>
-                      </td>
+                      {(userInfo?.role === 'admin' || userInfo?.role === 'moderator') && (
+                        <td className="px-6 py-4 whitespace-nowrap">
+                            <span className={`px-3 py-1 rounded-full text-xs font-medium ${question.verified ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'}`}>
+                                {question.verified ? 'Yes' : 'No'}
+                            </span>
+                        </td>
+                      )}
                        <td className="px-6 py-4">
                         <div className="flex flex-wrap gap-1">
                           <span
@@ -218,6 +228,13 @@ export function Practice() {
                            </span>
                         </div>
                       </td>
+                      {(userInfo?.role === 'admin' || userInfo?.role === 'moderator') && (
+                        <td className="px-6 py-4 whitespace-nowrap">
+                            <Link to={`/edit-question/${question.id}`} className="text-blue-600 hover:text-blue-900 flex items-center gap-1 text-sm font-medium">
+                                <Edit className="w-4 h-4" /> Edit
+                            </Link>
+                        </td>
+                      )}
                     </tr>
                   );
                 })}
@@ -237,3 +254,4 @@ export function Practice() {
     </div>
   );
 }
+
