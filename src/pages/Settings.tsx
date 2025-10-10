@@ -158,7 +158,7 @@ export function Settings() {
           <div className="flex flex-col items-center space-y-4">
             <div className="relative">
               <img 
-                src={userInfo.avatar || `https://placehold.co/128x128/60A5FA/FFFFFF?text=${displayName.charAt(0)}`} 
+                src={userInfo.avatar || '/user.png'}
                 alt="Avatar" 
                 className="w-32 h-32 rounded-full object-cover border-4 border-gray-200 dark:border-gray-700"
               />
@@ -245,3 +245,4 @@ export function Settings() {
     </div>
   );
 }
+

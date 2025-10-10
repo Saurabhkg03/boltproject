@@ -179,10 +179,10 @@ export function Profile() {
           <div className="lg:col-span-1 space-y-6">
             <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6 relative">
                 <div className="flex flex-col items-center text-center">
-                    <img 
-                      src={profileUser.avatar || `https://placehold.co/96x96/60A5FA/FFFFFF?text=${profileUser.name.charAt(0)}`}
-                      alt={profileUser.name} 
-                      className="w-24 h-24 rounded-full shadow-lg border-4 border-white dark:border-gray-800" 
+                    <img
+                      src={profileUser.avatar || '/user.png'}
+                      alt={profileUser.name}
+                      className="w-24 h-24 rounded-full shadow-lg border-4 border-white dark:border-gray-800 object-cover"
                     />
                     <h1 className="text-2xl font-bold text-gray-900 dark:text-white mt-4">
                       {profileUser.name}
@@ -287,3 +287,4 @@ export function Profile() {
     </div>
   );
 }
+

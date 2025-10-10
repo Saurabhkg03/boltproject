@@ -99,7 +99,11 @@ export function Navbar() {
             {isAuthenticated && user && userInfo ? (
               <div className="relative" ref={dropdownRef}>
                 <button onClick={() => setDropdownOpen(!dropdownOpen)} className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
-                   <img src={userInfo.avatar || `https://placehold.co/24x24/60A5FA/FFFFFF?text=${userInfo.name.charAt(0)}`} alt="avatar" className="w-6 h-6 rounded-full"/>
+                   <img
+                     src={userInfo.avatar || '/user.png'}
+                     alt={userInfo.name}
+                     className="w-6 h-6 rounded-full"
+                   />
                   <span className="text-sm font-medium text-gray-700 dark:text-gray-300 hidden lg:block">
                     {userInfo.name}
                   </span>
@@ -150,3 +154,4 @@ export function Navbar() {
     </nav>
   );
 }
+

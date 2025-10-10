@@ -4,7 +4,6 @@ import { Trophy, Award, TrendingUp, Target, Loader2 } from 'lucide-react';
 import { db } from '../firebase';
 import { collection, getDocs } from 'firebase/firestore';
 import { User } from '../data/mockData';
-import { getAvatarUrl } from '../utils';
 
 export function Leaderboard() {
   const [sortBy, setSortBy] = useState<'accuracy' | 'solved'>('accuracy');
@@ -140,7 +139,11 @@ export function Leaderboard() {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <Link to={`/profile/${user.username}`} className="flex items-center gap-3 group">
-                           <img src={getAvatarUrl(user)} alt={user.name} className="w-10 h-10 rounded-full"/>
+                          <img
+                            src={user.avatar || '/user.png'}
+                            alt={user.name}
+                            className="w-10 h-10 rounded-full object-cover"
+                          />
                           <div>
                             <p className="font-medium text-gray-900 dark:text-white group-hover:text-blue-500">
                               {user.name}
@@ -186,3 +189,4 @@ export function Leaderboard() {
     </div>
   );
 }
+

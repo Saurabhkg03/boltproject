@@ -79,7 +79,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         correct: 0,
         accuracy: 0
       },
-      avatar: userCredential.user.photoURL || '',
+      avatar: userCredential.user.photoURL || '/user.png',
       role: 'user',
       needsSetup: false,
     };
@@ -107,7 +107,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           correct: 0,
           accuracy: 0,
         },
-        avatar: user.photoURL || '',
+        avatar: user.photoURL || '/user.png',
         role: 'user',
         needsSetup: true
       };
@@ -171,3 +171,4 @@ export function useAuth() {
   }
   return context;
 }
+
