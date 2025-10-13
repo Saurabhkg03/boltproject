@@ -9,9 +9,9 @@ import {
   User as FirebaseUser,
   deleteUser
 } from 'firebase/auth';
-import { doc, setDoc, getDoc, collection, query, where, getDocs, deleteDoc } from 'firebase/firestore';
+import { doc, setDoc, getDoc, collection, query, where, getDocs, deleteDoc, orderBy } from 'firebase/firestore';
 import { auth, db } from '../firebase';
-import { User } from '../data/mockData';
+import { User, Submission } from '../data/mockData';
 
 interface AuthContextType {
   user: FirebaseUser | null;
@@ -24,6 +24,7 @@ interface AuthContextType {
   deleteAccount: () => Promise<void>;
   isAuthenticated: boolean;
   loading: boolean;
+  streak: number;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -32,6 +33,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [userInfo, setUserInfo] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [streak, setStreak] = useState(0);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -49,6 +51,57 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
     return unsubscribe;
   }, []);
+
+  useEffect(() => {
+    const calculateStreak = async () => {
+      if (user) {
+        try {
+          const submissionsQuery = query(
+            collection(db, `users/${user.uid}/submissions`),
+            orderBy('timestamp', 'desc')
+          );
+          const submissionsSnapshot = await getDocs(submissionsQuery);
+          const submissionsData = submissionsSnapshot.docs.map(doc => doc.data() as Submission);
+          
+          let currentStreak = 0;
+          if (submissionsData.length > 0) {
+              const submissionDates = [...new Set(submissionsData.map(s => new Date(s.timestamp).toDateString()))]
+                  .map(dateStr => new Date(dateStr))
+                  .sort((a, b) => b.getTime() - a.getTime());
+
+              if (submissionDates.length > 0) {
+                  const today = new Date();
+                  const yesterday = new Date();
+                  yesterday.setDate(today.getDate() - 1);
+
+                  const isToday = submissionDates[0].toDateString() === today.toDateString();
+                  const isYesterday = submissionDates[0].toDateString() === yesterday.toDateString();
+
+                  if (isToday || isYesterday) {
+                      currentStreak = 1;
+                      for (let i = 0; i < submissionDates.length - 1; i++) {
+                          const diff = (submissionDates[i].getTime() - submissionDates[i+1].getTime()) / (1000 * 3600 * 24);
+                          if (diff <= 1) {
+                              currentStreak++;
+                          } else {
+                              break;
+                          }
+                      }
+                  }
+              }
+          }
+          setStreak(currentStreak);
+        } catch (error) {
+          console.error("Failed to calculate streak:", error);
+          setStreak(0);
+        }
+      } else {
+        setStreak(0);
+      }
+    };
+
+    calculateStreak();
+  }, [user]);
 
   const login = async (email: string, password: string) => {
     await signInWithEmailAndPassword(auth, email, password);
@@ -129,11 +182,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     
     try {
-      // Delete user document from Firestore
       const userDocRef = doc(db, 'users', currentUser.uid);
       await deleteDoc(userDocRef);
 
-      // Delete the user from Firebase Auth
       await deleteUser(currentUser);
       
       setUserInfo(null);
@@ -157,7 +208,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       logout,
       deleteAccount,
       isAuthenticated: !!user,
-      loading
+      loading,
+      streak
     }}>
       {!loading && children}
     </AuthContext.Provider>
@@ -171,4 +223,3 @@ export function useAuth() {
   }
   return context;
 }
-

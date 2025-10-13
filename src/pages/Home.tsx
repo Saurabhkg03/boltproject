@@ -4,39 +4,31 @@ import { Zap, Award, ArrowRight, Loader2, BookOpen } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.tsx';
 import { db } from '../firebase.ts';
 import { collection, getDocs, query, limit } from 'firebase/firestore';
-import { Question, User } from '../data/mockData';
+import { Question, User } from '../data/mockData.ts';
 
-// Define a type for the Subject data structure we will use for display
 interface SubjectStats {
   name: string;
   count: number;
-  color: string; // Tailwind color class for styling
+  color: string;
 }
 
-// Color palette for dynamic subjects
 const COLORS = [
   'bg-blue-500', 'bg-green-500', 'bg-purple-500', 'bg-orange-500',
   'bg-pink-500', 'bg-teal-500', 'bg-red-500', 'bg-indigo-500',
   'bg-yellow-500', 'bg-cyan-500'
 ];
 
-/**
- * Generates a consistent color from a string.
- * @param str The string to hash.
- * @returns A Tailwind CSS background color class.
- */
 const getColorForString = (str: string): string => {
   let hash = 0;
   if (str.length === 0) return COLORS[0];
   for (let i = 0; i < str.length; i++) {
     const char = str.charCodeAt(i);
     hash = ((hash << 5) - hash) + char;
-    hash = hash & hash; // Convert to 32bit integer
+    hash = hash & hash;
   }
   const index = Math.abs(hash % COLORS.length);
   return COLORS[index];
 };
-
 
 export function Home() {
   const { userInfo, isAuthenticated } = useAuth();
@@ -49,18 +41,15 @@ export function Home() {
     const fetchData = async () => {
       setLoading(true);
       try {
-        // --- 1. Fetch All Questions for Subject Counts and Daily Challenge ---
         const questionsSnapshot = await getDocs(collection(db, 'questions'));
         const questionsData = questionsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Question));
         
-        // Calculate subject counts dynamically
         const subjectMap = questionsData.reduce((acc, q) => {
           const subjectName = q.subject || 'Uncategorized';
           acc[subjectName] = (acc[subjectName] || 0) + 1;
           return acc;
         }, {} as Record<string, number>);
 
-        // Map counts to the new structure with dynamic colors and sort alphabetically
         const updatedSubjects = Object.entries(subjectMap)
             .map(([name, count]) => ({
                 name,
@@ -71,29 +60,23 @@ export function Home() {
             
         setSubjectStats(updatedSubjects);
 
-        // --- 2. Set Daily Challenge (use a random or the first question found) ---
         if (questionsData.length > 0) {
-          // For simplicity, pick the first question available in the collection for the challenge
-          setDailyChallenge(questionsData[0]);
+          const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / (1000 * 60 * 60 * 24));
+          const challengeIndex = dayOfYear % questionsData.length;
+          setDailyChallenge(questionsData[challengeIndex]);
         }
         
-        // --- 3. Fetch Top 5 users for the leaderboard ---
-        const usersQuery = query(
-          collection(db, 'users'),
-          limit(20) // Fetch a reasonable number to sort client-side
-        );
+        const usersQuery = query(collection(db, 'users'), limit(20));
         const usersSnapshot = await getDocs(usersQuery);
         let leaderboardData = usersSnapshot.docs.map(doc => doc.data() as User);
 
-        // Client-side sort by accuracy (descending)
-        leaderboardData.sort((a, b) => b.stats.accuracy - a.stats.accuracy);
+        leaderboardData.sort((a, b) => (b.stats.accuracy || 0) - (a.stats.accuracy || 0));
         
-        // Take the top 5
         setLeaderboard(leaderboardData.slice(0, 5));
 
       } catch (error) {
         console.error("Error fetching home page data:", error);
-        setSubjectStats([]); // Reset on error
+        setSubjectStats([]);
       } finally {
         setLoading(false);
       }
@@ -102,165 +85,156 @@ export function Home() {
     fetchData();
   }, []);
 
-  // Show loading spinner if data is not yet available
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex items-center justify-center">
-        <Loader2 className="w-12 h-12 text-blue-600 animate-spin" />
+      <div className="min-h-screen flex items-center justify-center bg-transparent">
+        <Loader2 className="w-12 h-12 text-blue-500 animate-spin" />
       </div>
     );
   }
 
-
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <div className="text-center mb-12">
-          <h1 className="text-5xl font-bold text-gray-900 dark:text-white mb-4">
-            Practice. Analyze. Master GATE ECE.
-          </h1>
-          <p className="text-xl text-gray-600 dark:text-gray-400 mb-8">
-            Your complete platform for GATE Electronics & Communication preparation
-          </p>
-          {isAuthenticated && userInfo && (
-            <div className="inline-block">
-              <p className="text-lg text-gray-700 dark:text-gray-300 mb-2">
-                Welcome back, <span className="font-semibold text-blue-600 dark:text-blue-400">{userInfo.name}</span>!
-              </p>
-              <p className="text-sm text-gray-500 dark:text-gray-400">
-                Current Accuracy: <span className="font-semibold text-green-600 dark:text-green-400">{userInfo.stats.accuracy.toFixed(1)}%</span>
-              </p>
-            </div>
-          )}
-        </div>
-        
-        {isAuthenticated && dailyChallenge && (
-          <div className="mb-12 bg-gradient-to-r from-blue-500 to-blue-600 rounded-xl p-6 text-white shadow-lg">
-            <div className="flex items-center gap-2 mb-3">
-              <Zap className="w-6 h-6" fill="currentColor" />
-              <h2 className="text-2xl font-bold">Daily Challenge</h2>
-            </div>
-            <p className="text-blue-100 mb-4">
-              Try this question: "{dailyChallenge.title}" from the **{dailyChallenge.subject}** subject.
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 md:py-20">
+      <div className="text-center mb-16">
+        <h1 className="text-4xl md:text-6xl font-extrabold text-slate-900 dark:text-white mb-4 tracking-tight">
+          Practice. Analyze. <span className="text-blue-500">Master GATE.</span>
+        </h1>
+        <p className="text-lg md:text-xl text-slate-600 dark:text-slate-400 max-w-3xl mx-auto">
+          Your complete platform for GATE Electronics & Communication preparation, with curated questions, performance tracking, and community leaderboards.
+        </p>
+        {isAuthenticated && userInfo && (
+          <div className="mt-8 inline-block glass-card p-4">
+            <p className="text-lg text-slate-700 dark:text-slate-300">
+              Welcome back, <span className="font-semibold text-blue-600 dark:text-blue-300">{userInfo.name}</span>!
             </p>
-            <Link
-              to={`/question/${dailyChallenge.id}`}
-              className="inline-flex items-center gap-2 bg-white text-blue-600 px-6 py-3 rounded-lg font-semibold hover:bg-blue-50 transition-colors"
-            >
-              Start Now
-              <ArrowRight className="w-5 h-5" />
-            </Link>
-          </div>
-        )}
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-12">
-          <div className="lg:col-span-2">
-            <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">
-              Subjects Overview
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {subjectStats.map((subject) => (
-                <Link
-                  key={subject.name}
-                  to="/practice"
-                  state={{ subject: subject.name }}
-                  className={`rounded-xl p-6 border border-gray-200 dark:border-gray-800 transition-all hover:shadow-lg group ${
-                    subject.count > 0 
-                      ? 'bg-white dark:bg-gray-900 hover:border-blue-500 dark:hover:border-blue-500'
-                      : 'bg-gray-100 dark:bg-gray-800 opacity-70 cursor-not-allowed pointer-events-none'
-                  }`}
-                >
-                  <div className="flex items-center gap-4">
-                    <div className={`w-12 h-12 rounded-lg flex items-center justify-center transition-transform ${subject.color} ${subject.count > 0 ? 'group-hover:scale-110' : ''}`}>
-                      <BookOpen className="w-6 h-6 text-white" />
-                    </div>
-                    <div className="flex-1">
-                      <h3 className="font-semibold text-gray-900 dark:text-white mb-1">
-                        {subject.name}
-                      </h3>
-                      <p className={`text-sm ${subject.count > 0 ? 'text-gray-600 dark:text-gray-400' : 'text-gray-500 dark:text-gray-500'}`}>
-                        {subject.count} questions
-                      </p>
-                    </div>
-                    {subject.count > 0 && (
-                        <ArrowRight className="w-5 h-5 text-gray-400 group-hover:text-blue-600 group-hover:translate-x-1 transition-all" />
-                    )}
-                  </div>
-                </Link>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
-                Top Performers
-              </h2>
-              <Link
-                to="/leaderboard"
-                className="text-sm text-blue-600 dark:text-blue-400 hover:underline"
-              >
-                View All
-              </Link>
-            </div>
-            <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden shadow-md">
-              {leaderboard.length === 0 ? (
-                <div className="p-4 text-center text-gray-500 dark:text-gray-400">
-                    No users on the leaderboard yet.
-                </div>
-              ) : (
-                leaderboard.map((leader, index) => (
-                  <div
-                    key={leader.uid}
-                    className="flex items-center gap-4 p-4 border-b border-gray-200 dark:border-gray-800 last:border-b-0 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-                  >
-                    <div className={`w-8 h-8 flex items-center justify-center rounded-full font-bold ${
-                      index === 0 ? 'bg-yellow-500 text-white' :
-                      index === 1 ? 'bg-gray-400 text-white' :
-                      index === 2 ? 'bg-orange-600 text-white' :
-                      'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
-                    }`}>
-                      {index + 1}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium text-gray-900 dark:text-white truncate">
-                        {leader.name}
-                      </p>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">
-                        {leader.stats.correct}/{leader.stats.attempted} solved
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-1 text-green-600 dark:text-green-400">
-                      <Award className="w-4 h-4" />
-                      <span className="font-semibold text-sm">
-                        {leader.stats.accuracy.toFixed(1)}%
-                      </span>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        </div>
-
-        {!isAuthenticated && (
-          <div className="bg-blue-50 dark:bg-blue-950 rounded-xl p-8 text-center border border-blue-200 dark:border-blue-800 shadow-lg">
-            <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
-              Ready to start your GATE preparation?
-            </h3>
-            <p className="text-gray-600 dark:text-gray-400 mb-6">
-              Join thousands of students preparing for GATE ECE
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+              Current Accuracy: <span className="font-semibold text-green-600 dark:text-green-400">{(userInfo.stats.accuracy || 0).toFixed(1)}%</span>
             </p>
-            <Link
-              to="/login"
-              className="inline-flex items-center gap-2 bg-blue-600 text-white px-8 py-3 rounded-lg font-semibold hover:bg-blue-700 transition-colors shadow-md"
-            >
-              Get Started
-              <ArrowRight className="w-5 h-5" />
-            </Link>
           </div>
         )}
       </div>
+      
+      {isAuthenticated && dailyChallenge && (
+        <div className="mb-16 glass-card p-6 md:p-8 border-blue-500/20">
+          <div className="flex flex-col md:flex-row items-center gap-4 md:gap-8">
+              <div className="flex-shrink-0 w-16 h-16 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-2xl flex items-center justify-center shadow-lg">
+                <Zap className="w-8 h-8 text-white" />
+              </div>
+              <div className="flex-1 text-center md:text-left">
+                <h2 className="text-2xl font-bold text-slate-800 dark:text-white">Daily Challenge</h2>
+                <p className="text-slate-600 dark:text-slate-300 mt-1">
+                  "{dailyChallenge.title}" from **{dailyChallenge.subject}**. Give it a shot!
+                </p>
+              </div>
+              <Link
+                to={`/question/${dailyChallenge.id}`}
+                className="inline-flex items-center gap-2 bg-slate-800 text-white px-6 py-3 rounded-full font-semibold hover:bg-slate-900 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200 transition-colors shadow-md hover:shadow-lg transform hover:-translate-y-0.5"
+              >
+                Start Now
+                <ArrowRight className="w-5 h-5" />
+              </Link>
+          </div>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-16">
+        <div className="lg:col-span-2">
+          <h2 className="text-3xl font-bold text-slate-900 dark:text-white mb-6">
+            Subjects Overview
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {subjectStats.map((subject) => (
+              <Link
+                key={subject.name}
+                to="/practice"
+                state={{ subject: subject.name }}
+                className={`glass-card p-6 transition-all duration-300 group ${
+                  subject.count > 0 
+                    ? 'hover:shadow-xl hover:-translate-y-1'
+                    : 'opacity-60 cursor-not-allowed'
+                }`}
+                onClick={(e) => { if (subject.count === 0) e.preventDefault(); }}
+              >
+                <div className="flex items-center gap-4">
+                  <div className={`w-12 h-12 rounded-lg flex items-center justify-center transition-transform ${subject.color} ${subject.count > 0 ? 'group-hover:scale-110' : ''} shadow-md`}>
+                    <BookOpen className="w-6 h-6 text-white" />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="font-semibold text-lg text-slate-800 dark:text-white">
+                      {subject.name}
+                    </h3>
+                    <p className="text-sm text-slate-600 dark:text-slate-400">
+                      {subject.count} questions
+                    </p>
+                  </div>
+                  {subject.count > 0 && (
+                    <ArrowRight className="w-5 h-5 text-slate-400 dark:text-slate-500 group-hover:text-blue-500 group-hover:translate-x-1 transition-all" />
+                  )}
+                </div>
+              </Link>
+            ))}
+          </div>
+        </div>
+
+        <div className="glass-card p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-2xl font-bold text-slate-900 dark:text-white">
+              Top Performers
+            </h2>
+            <Link to="/leaderboard" className="text-sm font-medium text-blue-600 dark:text-blue-400 hover:underline">
+              View All
+            </Link>
+          </div>
+          <div className="space-y-4">
+            {leaderboard.length === 0 ? (
+              <p className="p-4 text-center text-slate-500 dark:text-slate-400">No users yet.</p>
+            ) : (
+              leaderboard.map((leader, index) => (
+                <div key={leader.uid} className="flex items-center gap-4">
+                  <div className={`w-8 h-8 flex items-center justify-center rounded-full font-bold text-sm ${
+                    index === 0 ? 'bg-yellow-400 text-white' :
+                    index === 1 ? 'bg-slate-400 text-white' :
+                    index === 2 ? 'bg-orange-500 text-white' :
+                    'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
+                  }`}>
+                    {index + 1}
+                  </div>
+                  <img src={leader.avatar || '/user.png'} alt={leader.name} className="w-10 h-10 rounded-full object-cover" />
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-slate-800 dark:text-white truncate">{leader.name}</p>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">
+                      {leader.stats.correct || 0}/{leader.stats.attempted || 0} solved
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1 text-green-600 dark:text-green-400">
+                    <Award className="w-4 h-4" />
+                    <span className="font-semibold text-sm">{(leader.stats.accuracy || 0).toFixed(1)}%</span>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </div>
+
+      {!isAuthenticated && (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-12 md:pb-20">
+            <div className="glass-card p-8 text-center">
+                <h3 className="text-2xl font-bold text-slate-800 dark:text-white mb-2">
+                Ready to start?
+                </h3>
+                <p className="text-slate-600 dark:text-slate-400 mb-6">
+                Create an account or log in to track your progress.
+                </p>
+                <Link
+                to="/login"
+                className="inline-flex items-center gap-2 bg-blue-600 text-white px-8 py-3 rounded-full font-semibold hover:bg-blue-700 transition-colors shadow-md hover:shadow-lg transform hover:-translate-y-0.5"
+                >
+                Get Started <ArrowRight className="w-5 h-5" />
+                </Link>
+            </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -3,14 +3,13 @@ export interface Question {
   title: string;
   subject: string;
   topic: string;
-  // These are the fields from your seed script
   question_html: string;
-  question_image_links?: string[]; // To hold clean image URLs
+  question_image_links?: string[];
   explanation_html: string;
-  explanation_image_links?: string[]; // To hold clean explanation image URLs
+  explanation_image_links?: string[];
   options: {
     label: string;
-    text_html: string; // RENAMED: Changed from 'text' to 'text_html' to match seeder
+    text_html: string;
     is_correct: boolean;
   }[];
   correctAnswerLabel: string;
@@ -19,13 +18,12 @@ export interface Question {
   source?: string;
   createdAt?: string;
   tags: string[];
-  // These can be calculated later
   accuracy?: number;
   attempts?: number;
-  question_type: 'mcq' | 'nat' | 'msq'; // Add this
-  nat_answer?: string; // And this
-  verified: boolean; // To check if admin has verified the question
-  addedBy?: string; // UID of the moderator who added the question
+  question_type: 'mcq' | 'nat' | 'msq';
+  nat_answer?: string;
+  verified: boolean;
+  addedBy?: string;
 }
 
 export interface User {
@@ -40,8 +38,8 @@ export interface User {
     accuracy: number;
   };
   avatar?: string;
-  role?: 'admin' | 'moderator' | 'user'; // Add user role
-  needsSetup?: boolean; // Flag to indicate if user needs to complete their profile
+  role?: 'admin' | 'moderator' | 'user';
+  needsSetup?: boolean;
 }
 
 export interface Submission {
@@ -50,5 +48,11 @@ export interface Submission {
   correct: boolean;
   timestamp: string;
   selectedOption: string;
-  natAnswer?: string; // Add this for NAT answers
+  natAnswer?: string;
+  timeTaken?: number;
+}
+
+export interface UserQuestionData {
+    isMarkedAsDoubt?: boolean;
+    note?: string;
 }

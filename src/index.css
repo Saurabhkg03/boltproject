@@ -1,22 +1,23 @@
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
-  html {
-    scroll-behavior: smooth;
+  html, body, #root {
+    @apply h-full;
   }
-
+  
   body {
-    @apply bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-white;
+    @apply text-slate-800 dark:text-slate-200 scroll-smooth;
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
   }
-}
 
-@layer utilities {
+  .glass-card {
+    @apply bg-white/40 dark:bg-slate-900/40 backdrop-blur-lg border border-white/30 dark:border-slate-800/60 rounded-2xl shadow-lg;
+  }
+  
   .prose-custom {
-    @apply text-gray-700 dark:text-gray-300;
+    @apply text-slate-700 dark:text-slate-300;
   }
 
   .prose-custom h1,
@@ -25,19 +26,17 @@
   .prose-custom h4,
   .prose-custom h5,
   .prose-custom h6 {
-    @apply text-gray-900 dark:text-white;
+    @apply text-slate-900 dark:text-white;
   }
 
   .prose-custom sub,
   .prose-custom sup {
-    font-size: 0.75em;
+    @apply text-xs;
   }
 }
 
-
 .katex-display {
   margin: 0 !important;
-  /* FIX: Change display to inline-block to prevent the block-level rendering and centering */
   display: inline-block !important; 
 }
 
@@ -53,3 +52,4 @@
 .katex-html {
   display: inline-block !important;
 }
+
