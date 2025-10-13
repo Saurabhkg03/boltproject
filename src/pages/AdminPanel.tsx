@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Shield, PlusCircle, Check, X, Loader2, Edit } from 'lucide-react';
-import { useAuth } from '../contexts/AuthContext';
-import { db } from '../firebase';
-import { collection, getDocs, doc, updateDoc, query, where, deleteDoc } from 'firebase/firestore';
-import { Question } from '../data/mockData';
+import { useAuth } from '../contexts/AuthContext.tsx';
+import { db } from '../firebase.ts';
+import { collection, getDocs, doc, updateDoc, query, where, deleteDoc, writeBatch } from 'firebase/firestore';
+import { Question } from '../data/mockData.ts';
 
 type AdminView = 'pending' | 'all';
 
@@ -13,6 +13,7 @@ export function AdminPanel() {
   const navigate = useNavigate();
   const [questions, setQuestions] = useState<Question[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isApprovingAll, setIsApprovingAll] = useState(false);
   const [adminView, setAdminView] = useState<AdminView>('pending');
 
 
@@ -56,10 +57,39 @@ export function AdminPanel() {
     setQuestions(questions.map(q => q.id === id ? { ...q, verified: true } : q));
   };
 
+  const handleApproveAll = async () => {
+    // In a real app, you'd want a confirmation modal here instead of window.confirm
+    if (window.confirm('Are you sure you want to approve all pending questions?')) {
+        setIsApprovingAll(true);
+        const pendingQuestions = questions.filter(q => !q.verified);
+        if (pendingQuestions.length === 0) {
+            setIsApprovingAll(false);
+            return;
+        }
+
+        const batch = writeBatch(db);
+        pendingQuestions.forEach(question => {
+            const questionRef = doc(db, 'questions', question.id);
+            batch.update(questionRef, { verified: true });
+        });
+
+        try {
+            await batch.commit();
+            setQuestions(questions.map(q => q.verified ? q : { ...q, verified: true }));
+        } catch (error) {
+            console.error("Error approving all questions:", error);
+        } finally {
+            setIsApprovingAll(false);
+        }
+    }
+  };
+
   const handleReject = async (id: string) => {
     // In a real app, you'd want a confirmation modal here instead of window.confirm
-    await deleteDoc(doc(db, 'questions', id));
-    setQuestions(questions.filter(q => q.id !== id));
+    if (window.confirm('Are you sure you want to delete this question? This cannot be undone.')) {
+        await deleteDoc(doc(db, 'questions', id));
+        setQuestions(questions.filter(q => q.id !== id));
+    }
   };
 
   const displayedQuestions = userInfo?.role === 'admin' && adminView === 'pending'
@@ -116,13 +146,23 @@ export function AdminPanel() {
         )}
 
         <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
-          <div className="p-4 border-b border-gray-200 dark:border-gray-800">
+          <div className="p-4 border-b border-gray-200 dark:border-gray-800 flex justify-between items-center flex-wrap gap-4">
             <h2 className="text-xl font-semibold">
               {userInfo?.role === 'admin' 
                 ? (adminView === 'pending' ? 'Questions for Verification' : 'All Questions')
                 : 'Your Submitted Questions'
               }
             </h2>
+            {userInfo?.role === 'admin' && adminView === 'pending' && displayedQuestions.length > 0 && (
+                <button
+                    onClick={handleApproveAll}
+                    disabled={isApprovingAll}
+                    className="inline-flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-green-700 transition-colors text-sm disabled:bg-gray-400"
+                >
+                    {isApprovingAll ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4"/>}
+                    Approve All ({displayedQuestions.length})
+                </button>
+            )}
           </div>
           {displayedQuestions.length === 0 ? (
             <p className="p-6 text-gray-500 dark:text-gray-400">

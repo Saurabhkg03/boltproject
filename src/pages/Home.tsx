@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Zap, Award, ArrowRight, Loader2, BookOpen } from 'lucide-react';
-import { useAuth } from '../contexts/AuthContext';
-import { db } from '../firebase';
+import { useAuth } from '../contexts/AuthContext.tsx';
+import { db } from '../firebase.ts';
 import { collection, getDocs, query, limit } from 'firebase/firestore';
 import { Question, User } from '../data/mockData';
 
@@ -13,22 +13,36 @@ interface SubjectStats {
   color: string; // Tailwind color class for styling
 }
 
-// Define the static list of subjects and their associated colors/icons
-const SUBJECTS_CONFIG: SubjectStats[] = [
-  { name: 'Network Theory', count: 0, color: 'bg-blue-500' },
-  { name: 'Signals & Systems', count: 0, color: 'bg-green-500' },
-  { name: 'Control Systems', count: 0, color: 'bg-purple-500' },
-  { name: 'Digital Electronics', count: 0, color: 'bg-orange-500' },
-  { name: 'Communication', count: 0, color: 'bg-pink-500' },
-  { name: 'EMFT', count: 0, color: 'bg-teal-500' },
+// Color palette for dynamic subjects
+const COLORS = [
+  'bg-blue-500', 'bg-green-500', 'bg-purple-500', 'bg-orange-500',
+  'bg-pink-500', 'bg-teal-500', 'bg-red-500', 'bg-indigo-500',
+  'bg-yellow-500', 'bg-cyan-500'
 ];
+
+/**
+ * Generates a consistent color from a string.
+ * @param str The string to hash.
+ * @returns A Tailwind CSS background color class.
+ */
+const getColorForString = (str: string): string => {
+  let hash = 0;
+  if (str.length === 0) return COLORS[0];
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32bit integer
+  }
+  const index = Math.abs(hash % COLORS.length);
+  return COLORS[index];
+};
 
 
 export function Home() {
   const { userInfo, isAuthenticated } = useAuth();
   const [dailyChallenge, setDailyChallenge] = useState<Question | null>(null);
   const [leaderboard, setLeaderboard] = useState<User[]>([]);
-  const [subjectStats, setSubjectStats] = useState<SubjectStats[]>(SUBJECTS_CONFIG);
+  const [subjectStats, setSubjectStats] = useState<SubjectStats[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -39,17 +53,22 @@ export function Home() {
         const questionsSnapshot = await getDocs(collection(db, 'questions'));
         const questionsData = questionsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Question));
         
-        // Calculate subject counts
-        const counts = questionsData.reduce((acc, q) => {
-          acc[q.subject] = (acc[q.subject] || 0) + 1;
+        // Calculate subject counts dynamically
+        const subjectMap = questionsData.reduce((acc, q) => {
+          const subjectName = q.subject || 'Uncategorized';
+          acc[subjectName] = (acc[subjectName] || 0) + 1;
           return acc;
         }, {} as Record<string, number>);
 
-        // Map counts to the SUBJECTS_CONFIG structure
-        const updatedSubjects = SUBJECTS_CONFIG.map(config => ({
-          ...config,
-          count: counts[config.name] || 0,
-        }));
+        // Map counts to the new structure with dynamic colors and sort alphabetically
+        const updatedSubjects = Object.entries(subjectMap)
+            .map(([name, count]) => ({
+                name,
+                count,
+                color: getColorForString(name),
+            }))
+            .sort((a, b) => a.name.localeCompare(b.name));
+            
         setSubjectStats(updatedSubjects);
 
         // --- 2. Set Daily Challenge (use a random or the first question found) ---
@@ -59,11 +78,6 @@ export function Home() {
         }
         
         // --- 3. Fetch Top 5 users for the leaderboard ---
-        // NOTE: Since Firestore `orderBy` on nested fields (like 'stats.accuracy') often requires 
-        // composite indexes, which we avoid requiring the user to set up, we will fetch 
-        // a larger set of users (e.g., 20) and sort client-side, but keep the query simple 
-        // to minimize database reads, assuming the collection is small.
-        // For production, this query should be indexed. For this implementation, we simply limit results.
         const usersQuery = query(
           collection(db, 'users'),
           limit(20) // Fetch a reasonable number to sort client-side
@@ -79,7 +93,7 @@ export function Home() {
 
       } catch (error) {
         console.error("Error fetching home page data:", error);
-        setSubjectStats(SUBJECTS_CONFIG.map(s => ({...s, count: 0}))); // Reset on error
+        setSubjectStats([]); // Reset on error
       } finally {
         setLoading(false);
       }
@@ -87,9 +101,6 @@ export function Home() {
 
     fetchData();
   }, []);
-
-  // Removed the useMemo for availableSubjects and primarySubject as they are no longer needed for the highlight section.
-
 
   // Show loading spinner if data is not yet available
   if (loading) {
@@ -122,11 +133,7 @@ export function Home() {
             </div>
           )}
         </div>
-
         
-        {/* The Available Subject Highlight Section has been removed as requested. */}
-
-        {/* Daily Challenge Section - Remains Optional based on question fetch */}
         {isAuthenticated && dailyChallenge && (
           <div className="mb-12 bg-gradient-to-r from-blue-500 to-blue-600 rounded-xl p-6 text-white shadow-lg">
             <div className="flex items-center gap-2 mb-3">
@@ -156,7 +163,7 @@ export function Home() {
                 <Link
                   key={subject.name}
                   to="/practice"
-                  // Use conditional class for styling if there are no questions
+                  state={{ subject: subject.name }}
                   className={`rounded-xl p-6 border border-gray-200 dark:border-gray-800 transition-all hover:shadow-lg group ${
                     subject.count > 0 
                       ? 'bg-white dark:bg-gray-900 hover:border-blue-500 dark:hover:border-blue-500'
@@ -257,3 +264,4 @@ export function Home() {
     </div>
   );
 }
+

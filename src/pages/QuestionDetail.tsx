@@ -1,19 +1,11 @@
 import { useState, useEffect, useRef, createContext, useContext } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, CheckCircle, XCircle, Clock, Loader2 } from 'lucide-react';
-
-import 'katex/dist/katex.min.css';
-import renderMathInElement from 'katex/contrib/auto-render/auto-render';
-
-if (typeof window !== 'undefined') {
-  window.renderMathInElement = renderMathInElement;
-}
-
+import { ArrowLeft, ArrowRight, CheckCircle, XCircle, Loader2, BookOpen, Bookmark, Calendar, RefreshCcw, Save, AlertTriangle, Timer as TimerIcon, Play, Pause } from 'lucide-react';
 
 // --- FIREBASE AND AUTH SETUP (Internalized to fix compile errors) ---
 import { initializeApp, getApps, getApp } from 'firebase/app'; // Import getApps and getApp
 import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged, User as FirebaseAuthUser } from 'firebase/auth';
-import { getFirestore, doc, getDoc, setDoc, collection, getDocs, updateDoc } from 'firebase/firestore';
+import { getFirestore, doc, getDoc, setDoc, collection, getDocs, updateDoc, deleteDoc } from 'firebase/firestore';
 
 
 
@@ -28,6 +20,7 @@ interface Question {
   title: string;
   subject: string;
   topic: string;
+  branch: string;
   question_html: string;
   question_image_links?: string[]; // To hold clean image URLs
   explanation_html: string;
@@ -69,6 +62,13 @@ interface Submission {
   timestamp: string;
   selectedOption: string;
   natAnswer?: string;
+  timeTaken?: number;
+}
+
+// New interface for user-specific data on a question
+interface UserQuestionData {
+    isMarkedAsDoubt?: boolean;
+    note?: string;
 }
 
 
@@ -84,10 +84,16 @@ const auth = getAuth(app);
 interface AuthContextType {
   user: FirebaseAuthUser | null;
   userInfo: UserInfo | null;
-  setUserInfo: React.Dispatch<React.SetStateAction<UserInfo | null>> | undefined;
+  setUserInfo: React.Dispatch<React.SetStateAction<UserInfo | null>>;
 }
-const AuthContext = createContext<AuthContextType>({ user: null, userInfo: null, setUserInfo: undefined });
-const useAuth = () => useContext(AuthContext);
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
+const useAuth = () => {
+    const context = useContext(AuthContext);
+    if (!context) {
+        throw new Error("useAuth must be used within an AuthProvider");
+    }
+    return context;
+};
 
 // Mock Auth Provider (Internalized)
 const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -99,9 +105,9 @@ const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => 
     // 1. Authenticate user
     const authenticate = async () => {
       try {
-        if (typeof __initial_auth_token !== 'undefined') {
+        if (typeof __initial_auth_token !== 'undefined' && auth.currentUser === null) {
           await signInWithCustomToken(auth, __initial_auth_token);
-        } else {
+        } else if (auth.currentUser === null) {
           await signInAnonymously(auth);
         }
       } catch (error) {
@@ -177,25 +183,25 @@ declare global {
 const extractAndCleanHtml = (html: string, contentClass?: string): string => {
   if (!html) return '';
   
-  // 1. Remove <noscript> and <img> tags globally
   let clean = html.replace(/<noscript>[\s\S]*?<\/noscript>/gi, '');
   clean = clean.replace(/<img[^>]*>/gi, '');
 
-  // 2. If a specific class is provided, attempt to extract the inner content
   if (contentClass) {
-    // Regex to find the div with the specific class and capture its content (non-greedy)
     const regex = new RegExp(`<div[^>]*class=["'][^"']*${contentClass}[^"']*["'][^>]*>([\\s\\S]*?)<\/div>`, 'i');
     const match = clean.match(regex);
-    
-    // If the content is successfully extracted, use that content.
     if (match && match[1]) {
       return match[1].trim();
     }
   }
 
-  // 3. If no specific class was provided or extraction failed, return the globally cleaned string
   return clean.trim();
 };
+
+const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60).toString().padStart(2, '0');
+    const secs = (seconds % 60).toString().padStart(2, '0');
+    return `${mins}:${secs}`;
+}
 
 
 // --- MAIN APPLICATION COMPONENT ---
@@ -213,18 +219,35 @@ function QuestionDetailComponent() {
   const [natAnswer, setNatAnswer] = useState('');
   const [submitted, setSubmitted] = useState(false);
   const [isCorrect, setIsCorrect] = useState(false);
+  const [resetting, setResetting] = useState(false);
+  
+  // New state for features
+  const [timeElapsed, setTimeElapsed] = useState(0);
+  const [isTimerOn, setIsTimerOn] = useState(false);
+  const [isDoubt, setIsDoubt] = useState(false);
+  const [note, setNote] = useState('');
+  const [savingNote, setSavingNote] = useState(false);
+  const timerRef = useRef<number | null>(null);
 
   const questionRef = useRef<HTMLDivElement>(null);
   const explanationRef = useRef<HTMLDivElement>(null);
   const optionsRef = useRef<(HTMLButtonElement | null)[]>([]); 
 
+  // Combined effect to fetch all question-related data
   useEffect(() => {
-    const fetchQuestionData = async () => {
+    const fetchAllData = async () => {
       if (!id) return;
+      
+      if(timerRef.current) clearInterval(timerRef.current);
+
       setLoading(true);
       setSubmitted(false);
       setSelectedOption(null);
       setNatAnswer('');
+      setIsDoubt(false);
+      setNote('');
+      setTimeElapsed(0);
+      setIsTimerOn(false);
 
       try {
         const docRef = doc(db, 'questions', id);
@@ -236,17 +259,26 @@ function QuestionDetailComponent() {
 
           if (user) {
             const submissionRef = doc(db, `users/${user.uid}/submissions`, id);
-            const submissionSnap = await getDoc(submissionRef);
+            const userQuestionDataRef = doc(db, `users/${user.uid}/userQuestionData`, id);
+            
+            const [submissionSnap, userQuestionDataSnap] = await Promise.all([
+                getDoc(submissionRef),
+                getDoc(userQuestionDataRef)
+            ]);
+
             if (submissionSnap.exists()) {
               const sub = submissionSnap.data() as Submission;
               setSubmitted(true);
               setIsCorrect(sub.correct);
-              if (sub.selectedOption) {
-                setSelectedOption(sub.selectedOption);
-              }
-              if (sub.natAnswer) {
-                setNatAnswer(sub.natAnswer);
-              }
+              setSelectedOption(sub.selectedOption || null);
+              setNatAnswer(sub.natAnswer || '');
+              setTimeElapsed(sub.timeTaken || 0); // Display saved time
+            }
+
+            if (userQuestionDataSnap.exists()) {
+                const data = userQuestionDataSnap.data() as UserQuestionData;
+                setIsDoubt(data.isMarkedAsDoubt || false);
+                setNote(data.note || '');
             }
           }
         } else {
@@ -256,48 +288,88 @@ function QuestionDetailComponent() {
         if (allQuestions.length === 0) {
           const querySnapshot = await getDocs(collection(db, 'questions'));
           const questionsData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Question));
-          questionsData.sort((a, b) => (a.title || "").localeCompare(b.title || "")); 
+          questionsData.sort((a, b) => {
+              const numA = parseInt((a.title || '0').replace('Question ', ''), 10);
+              const numB = parseInt((b.title || '0').replace('Question ', ''), 10);
+              return numA - numB;
+          }); 
           setAllQuestions(questionsData);
         }
       } catch (error) {
-        console.error("Error fetching question:", error);
+        console.error("Error fetching question data:", error);
       } finally {
         setLoading(false);
       }
     };
 
-    if (user || !userInfo) {
-      fetchQuestionData();
+    fetchAllData();
+    
+    return () => {
+        if(timerRef.current) clearInterval(timerRef.current);
     }
-  }, [id, user, allQuestions.length]);
+  }, [id, user]);
+
+    // Dedicated effect for timer logic
+    useEffect(() => {
+        if (isTimerOn && !submitted) {
+            timerRef.current = window.setInterval(() => {
+                setTimeElapsed(prev => prev + 1);
+            }, 1000);
+        } else {
+            if (timerRef.current) {
+                clearInterval(timerRef.current);
+            }
+        }
+
+        return () => {
+            if (timerRef.current) {
+                clearInterval(timerRef.current);
+            }
+        };
+    }, [isTimerOn, submitted]);
 
   useEffect(() => {
-    // Render KaTeX after question and submission state has stabilized
-    if (!loading && question && window.renderMathInElement) {
-      const renderOptions = {
-        delimiters: [
-          { left: '[latex]', right: '[/latex]', display: true },
-          { left: '$$', right: '$$', display: true },
-          { left: '$', right: '$', display: false },
-          { left: '\\(', right: '\\)', display: false },
-          { left: '\\[', right: '\\]', display: true }
-        ],
-        throwOnError: false
-      };
-      if (questionRef.current) {
-        window.renderMathInElement(questionRef.current, renderOptions);
-      }
-      if (submitted && explanationRef.current) {
-        window.renderMathInElement(explanationRef.current, renderOptions);
-      }
-      optionsRef.current.forEach(el => {
-        if (el) window.renderMathInElement(el, renderOptions);
-      });
+    const renderKatex = () => {
+        if (loading || !question || !window.renderMathInElement) return;
+
+        const renderOptions = {
+            delimiters: [
+            { left: '[latex]', right: '[/latex]', display: true },
+            { left: '$$', right: '$$', display: true },
+            { left: '$', right: '$', display: false },
+            { left: '\\(', right: '\\)', display: false },
+            { left: '\\[', right: '\\]', display: true }
+            ],
+            throwOnError: false
+        };
+        if (questionRef.current) {
+            window.renderMathInElement(questionRef.current, renderOptions);
+        }
+        if (submitted && explanationRef.current) {
+            window.renderMathInElement(explanationRef.current, renderOptions);
+        }
+        optionsRef.current.forEach(el => {
+            if (el) window.renderMathInElement(el, renderOptions);
+        });
+    };
+
+    if (!window.renderMathInElement) {
+        const intervalId = setInterval(() => {
+            if (window.renderMathInElement) {
+                renderKatex();
+                clearInterval(intervalId);
+            }
+        }, 100);
+        return () => clearInterval(intervalId);
+    } else {
+        renderKatex();
     }
   }, [question, loading, submitted]);
 
   const handleSubmit = async () => {
     if (!user || !question || !userInfo || submitted) return;
+    
+    setIsTimerOn(false); // Stop timer on submit
 
     let userCorrect = false;
 
@@ -312,7 +384,7 @@ function QuestionDetailComponent() {
     setIsCorrect(userCorrect);
     setSubmitted(true);
 
-    const submissionData: Submission = {
+    const submissionData: Partial<Submission> = {
       qid: question.id,
       uid: user.uid,
       correct: userCorrect,
@@ -320,23 +392,84 @@ function QuestionDetailComponent() {
       selectedOption: selectedOption || '',
       natAnswer: natAnswer,
     };
+    
+    if (timeElapsed > 0) {
+        submissionData.timeTaken = timeElapsed;
+    }
 
     await setDoc(doc(db, `users/${user.uid}/submissions`, question.id), submissionData);
 
     const newStats = { ...userInfo.stats };
-    newStats.attempted += 1;
+    newStats.attempted = (newStats.attempted || 0) + 1;
     if (userCorrect) {
-      newStats.correct += 1;
+      newStats.correct = (newStats.correct || 0) + 1;
     }
     newStats.accuracy = (newStats.correct / newStats.attempted) * 100;
 
-    const userDocRef = doc(db, `users/${user.uid}`);
+    const userDocRef = doc(db, 'users', user.uid);
     await updateDoc(userDocRef, { stats: newStats });
 
-    if (setUserInfo) {
-      setUserInfo({ ...userInfo, stats: newStats });
+    setUserInfo({ ...userInfo, stats: newStats });
+  };
+
+  const handleTryAgain = async () => {
+    if (!user || !question || !userInfo || resetting) return;
+
+    setResetting(true);
+    try {
+        const newStats = { ...userInfo.stats };
+        if (newStats.attempted > 0) {
+            newStats.attempted -= 1;
+            if (isCorrect) {
+                newStats.correct -= 1;
+            }
+        }
+        
+        newStats.accuracy = newStats.attempted > 0 ? (newStats.correct / newStats.attempted) * 100 : 0;
+
+        const userDocRef = doc(db, 'users', user.uid);
+        const submissionDocRef = doc(db, `users/${user.uid}/submissions`, question.id);
+
+        await updateDoc(userDocRef, { stats: newStats });
+        await deleteDoc(submissionDocRef);
+
+        setUserInfo({ ...userInfo, stats: newStats });
+        setSubmitted(false);
+        setSelectedOption(null);
+        setNatAnswer('');
+        setIsCorrect(false);
+        
+        // Reset timer state
+        setTimeElapsed(0);
+        setIsTimerOn(false);
+
+    } catch (error) {
+        console.error("Error resetting question:", error);
+    } finally {
+        setResetting(false);
     }
   };
+  
+  const handleToggleDoubt = async () => {
+    if (!user || !id) return;
+    const newDoubtStatus = !isDoubt;
+    setIsDoubt(newDoubtStatus);
+    const userQuestionDataRef = doc(db, `users/${user.uid}/userQuestionData`, id);
+    await setDoc(userQuestionDataRef, { isMarkedAsDoubt: newDoubtStatus }, { merge: true });
+  }
+
+  const handleSaveNote = async () => {
+      if (!user || !id) return;
+      setSavingNote(true);
+      const userQuestionDataRef = doc(db, `users/${user.uid}/userQuestionData`, id);
+      try {
+          await setDoc(userQuestionDataRef, { note: note }, { merge: true });
+      } catch (error) {
+          console.error("Error saving note: ", error);
+      } finally {
+          setSavingNote(false);
+      }
+  }
 
   const findNextQuestionId = () => {
     if (!id || allQuestions.length === 0) return null;
@@ -352,11 +485,10 @@ function QuestionDetailComponent() {
     if (nextId) {
       navigate(`/question/${nextId}`);
     } else {
-      navigate('/practice'); 
+      navigate('/practice');
     }
-  }
+  };
 
-  // Loading state (combines auth loading and data loading)
   if (loading || !userInfo) {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex items-center justify-center">
@@ -392,9 +524,17 @@ function QuestionDetailComponent() {
     }
   };
   
-  // Cleaned content for the main question and explanation
   const cleanedQuestionHtml = extractAndCleanHtml(question.question_html, 'question_text');
   const cleanedExplanationHtml = extractAndCleanHtml(question.explanation_html, 'mtq_explanation-text');
+
+  const primaryInfo = new Set([
+      question.subject?.toLowerCase(),
+      question.topic?.toLowerCase(),
+      `gate ${question.year}`.toLowerCase(),
+      question.year?.toLowerCase(),
+      question.branch?.toLowerCase(),
+  ]);
+  const otherTags = (question.tags || []).filter(tag => tag && !primaryInfo.has(tag.toLowerCase()));
 
 
   return (
@@ -410,22 +550,51 @@ function QuestionDetailComponent() {
 
         <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden shadow-lg">
           <div className="p-6 border-b border-gray-200 dark:border-gray-800">
-            <div className="flex items-start justify-between mb-4">
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
-                  {question.title}
-                </h1>
-                <div className="flex flex-wrap items-center gap-3">
-                  <span className={`px-3 py-1 rounded-full text-xs font-medium ${getDifficultyColor(question.difficulty)}`}>
-                    {question.difficulty || 'N/A'}
-                  </span>
-                  <div className="flex items-center gap-1 text-gray-600 dark:text-gray-400">
-                    <Clock className="w-4 h-4" />
-                    <span className="text-sm">GATE {question.year}</span>
-                  </div>
-                </div>
-              </div>
+             <div className="flex justify-between items-start mb-3">
+                 <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+                    {question.title}
+                 </h1>
+                 <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400 font-medium">
+                        <TimerIcon className="w-5 h-5"/>
+                        <span>{formatTime(timeElapsed)}</span>
+                         <button onClick={() => setIsTimerOn(!isTimerOn)} disabled={submitted} className="p-1 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed">
+                             {isTimerOn ? <Pause className="w-4 h-4"/> : <Play className="w-4 h-4"/>}
+                         </button>
+                    </div>
+                     <button onClick={handleToggleDoubt} disabled={!user} className={`flex items-center gap-2 text-sm font-medium px-3 py-1.5 rounded-lg transition-colors border ${
+                         isDoubt 
+                         ? 'bg-yellow-100 text-yellow-800 border-yellow-200 dark:bg-yellow-900/50 dark:text-yellow-300 dark:border-yellow-700' 
+                         : 'bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700 hover:bg-gray-200 dark:hover:bg-gray-700'
+                     } disabled:opacity-50`}>
+                         <AlertTriangle className={`w-4 h-4 ${isDoubt ? 'fill-current' : ''}`}/>
+                         {isDoubt ? 'Marked' : 'Mark as Doubt'}
+                     </button>
+                 </div>
+             </div>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-gray-600 dark:text-gray-400">
+              <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${getDifficultyColor(question.difficulty)}`}>
+                {question.difficulty}
+              </span>
+               <span className="flex items-center gap-1.5">
+                <BookOpen className="w-4 h-4" /> {question.subject}
+              </span>
+               <span className="flex items-center gap-1.5">
+                <Bookmark className="w-4 h-4" /> {question.topic}
+              </span>
+              <span className="flex items-center gap-1.5">
+                <Calendar className="w-4 h-4" /> GATE {question.year}
+              </span>
             </div>
+             {otherTags.length > 0 && (
+                <div className="mt-4 flex flex-wrap items-center gap-2">
+                    {otherTags.map(tag => (
+                        <span key={tag} className="px-2 py-1 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded text-xs">
+                            {tag}
+                        </span>
+                    ))}
+                </div>
+             )}
           </div>
 
           <div className="p-6">
@@ -433,10 +602,8 @@ function QuestionDetailComponent() {
               ref={questionRef}
               className="text-gray-800 dark:text-gray-200 space-y-4 max-w-none mb-8 prose dark:prose-invert"
             >
-              {/* Question HTML content: Now uses the cleaned, extracted HTML */}
               <div dangerouslySetInnerHTML={{ __html: cleanedQuestionHtml }} />
               
-              {/* Question Image Links: Still renders external images separately */}
               {question.question_image_links && question.question_image_links.map((imgUrl, index) => (
                 <img
                   key={`q-img-${index}`}
@@ -468,7 +635,6 @@ function QuestionDetailComponent() {
                   const showResult = submitted;
                   const isCorrectOption = option.is_correct;
                   
-                  // Cleaned content for the option (inside 'option_data' div)
                   const cleanedOptionHtml = extractAndCleanHtml(option.text_html, 'option_data');
 
                   let optionClasses = 'w-full p-4 rounded-lg border-2 text-left transition-all ';
@@ -499,7 +665,6 @@ function QuestionDetailComponent() {
                         <span className="flex-shrink-0 w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center font-semibold text-gray-700 dark:text-gray-300">
                           {option.label}
                         </span>
-                        {/* Now using cleanedOptionHtml */}
                         <span className="flex-1 text-gray-900 dark:text-white" dangerouslySetInnerHTML={{ __html: cleanedOptionHtml }} />
                         {showResult && isCorrectOption && (
                           <CheckCircle className="w-6 h-6 text-green-600" />
@@ -543,10 +708,8 @@ function QuestionDetailComponent() {
                       ref={explanationRef}
                       className="space-y-2 max-w-none text-blue-800 dark:text-blue-200 text-sm prose dark:prose-invert"
                     >
-                      {/* Explanation HTML content: Now uses the cleaned, extracted HTML */}
                       <div dangerouslySetInnerHTML={{ __html: cleanedExplanationHtml }} />
                       
-                      {/* Explanation Image Links */}
                       {question.explanation_image_links && question.explanation_image_links.map((imgUrl, index) => (
                         <img
                           key={`e-img-${index}`}
@@ -558,19 +721,48 @@ function QuestionDetailComponent() {
                     </div>
                   </div>
                 )}
-
-                {findNextQuestionId() && (
-                  <button
-                    onClick={handleNext}
-                    className="w-full py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
-                  >
-                    Next Question
-                    <ArrowRight className="w-5 h-5" />
-                  </button>
-                )}
+                <div className="flex flex-col sm:flex-row gap-2">
+                    <button
+                        onClick={handleTryAgain}
+                        disabled={resetting}
+                        className="w-full py-3 bg-gray-200 text-gray-800 dark:bg-gray-700 dark:text-white rounded-lg font-semibold hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                    >
+                        {resetting ? <Loader2 className="w-5 h-5 animate-spin" /> : <RefreshCcw className="w-5 h-5" />}
+                        Try Again
+                    </button>
+                    {findNextQuestionId() && (
+                      <button
+                        onClick={handleNext}
+                        className="w-full py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
+                      >
+                        Next Question
+                        <ArrowRight className="w-5 h-5" />
+                      </button>
+                    )}
+                </div>
               </div>
             )}
           </div>
+          
+           {/* Notes Section */}
+          <div className="p-6 border-t border-gray-200 dark:border-gray-800">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">My Notes</h3>
+                <textarea
+                    value={note}
+                    onChange={(e) => setNote(e.target.value)}
+                    disabled={!user}
+                    placeholder={user ? "Write a short note for this question..." : "You must be logged in to save notes."}
+                    className="w-full p-3 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-white min-h-[100px]"
+                />
+                <button
+                    onClick={handleSaveNote}
+                    disabled={!user || savingNote}
+                    className="mt-3 w-full sm:w-auto px-6 py-2 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 disabled:bg-gray-400 flex items-center justify-center gap-2"
+                >
+                    {savingNote ? <Loader2 className="w-5 h-5 animate-spin"/> : <Save className="w-5 h-5" />}
+                    Save Note
+                </button>
+            </div>
         </div>
       </div>
     </div>
@@ -585,3 +777,4 @@ export function QuestionDetail() {
     </AuthProvider>
   );
 }
+

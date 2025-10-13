@@ -1,19 +1,32 @@
 import { useState, useMemo, useEffect } from 'react';
-import { Link } from 'react-router-dom';
-import { Search, Filter, CheckCircle, Circle, Loader2, Edit } from 'lucide-react';
-import { useAuth } from '../contexts/AuthContext';
-import { db } from '../firebase';
+import { Link, useLocation } from 'react-router-dom';
+import { Search, Filter, CheckCircle, Circle, Loader2, Edit, ArrowDownUp } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext.tsx';
+import { db } from '../firebase.ts';
 import { collection, getDocs, query, where } from 'firebase/firestore';
-import { Question, Submission } from '../data/mockData';
+import { Question, Submission } from '../data/mockData.ts';
 
 export function Practice() {
   const { user, userInfo } = useAuth();
+  const location = useLocation();
+
   const [searchQuery, setSearchQuery] = useState('');
   const [difficultyFilter, setDifficultyFilter] = useState<string>('all');
   const [topicFilter, setTopicFilter] = useState<string>('all');
+  const [subjectFilter, setSubjectFilter] = useState<string>(location.state?.subject || 'all');
+  const [yearFilter, setYearFilter] = useState<string>('all');
+  const [tagFilter, setTagFilter] = useState<string>('all');
+  const [sortOrder, setSortOrder] = useState<string>('default');
   const [questions, setQuestions] = useState<Question[]>([]);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (location.state?.subject) {
+      setSubjectFilter(location.state.subject);
+    }
+  }, [location.state]);
+
 
   useEffect(() => {
     const fetchQuestionsAndSubmissions = async () => {
@@ -49,8 +62,23 @@ export function Practice() {
     return Array.from(topicSet).sort();
   }, [questions]);
 
-  const filteredQuestions = useMemo(() => {
-    return questions.filter(q => {
+  const subjects = useMemo(() => {
+    const subjectSet = new Set(questions.map(q => q.subject));
+    return Array.from(subjectSet).sort();
+  }, [questions]);
+
+  const years = useMemo(() => {
+      const yearSet = new Set(questions.map(q => q.year));
+      return Array.from(yearSet).sort((a, b) => b.localeCompare(a)); // Sort descending
+  }, [questions]);
+
+  const tags = useMemo(() => {
+      const tagSet = new Set(questions.flatMap(q => q.tags || []));
+      return Array.from(tagSet).sort();
+  }, [questions]);
+
+  const filteredAndSortedQuestions = useMemo(() => {
+    let filtered = questions.filter(q => {
       const lowerCaseQuery = searchQuery.toLowerCase();
       const matchesSearch =
         q.id.toLowerCase().includes(lowerCaseQuery) ||
@@ -60,10 +88,42 @@ export function Practice() {
 
       const matchesDifficulty = difficultyFilter === 'all' || q.difficulty === difficultyFilter;
       const matchesTopic = topicFilter === 'all' || q.topic === topicFilter;
+      const matchesSubject = subjectFilter === 'all' || q.subject === subjectFilter;
+      const matchesYear = yearFilter === 'all' || q.year === yearFilter;
+      const matchesTag = tagFilter === 'all' || (q.tags && q.tags.includes(tagFilter));
 
-      return matchesSearch && matchesDifficulty && matchesTopic;
+      return matchesSearch && matchesDifficulty && matchesTopic && matchesSubject && matchesYear && matchesTag;
     });
-  }, [searchQuery, difficultyFilter, topicFilter, questions]);
+
+    const difficultyOrder: { [key: string]: number } = { 'Easy': 1, 'Medium': 2, 'Hard': 3 };
+
+    switch (sortOrder) {
+        case 'difficulty-asc':
+            filtered.sort((a, b) => difficultyOrder[a.difficulty] - difficultyOrder[b.difficulty]);
+            break;
+        case 'difficulty-desc':
+            filtered.sort((a, b) => difficultyOrder[b.difficulty] - difficultyOrder[a.difficulty]);
+            break;
+        case 'year-desc':
+            filtered.sort((a, b) => b.year.localeCompare(a.year));
+            break;
+        case 'year-asc':
+            filtered.sort((a, b) => a.year.localeCompare(b.year));
+            break;
+        case 'default':
+        default:
+             // Default sort by the numeric part of the title
+            filtered.sort((a, b) => {
+                const numA = parseInt(a.title.replace('Question ', ''), 10);
+                const numB = parseInt(b.title.replace('Question ', ''), 10);
+                return numA - numB;
+            });
+            break;
+    }
+
+    return filtered;
+
+  }, [searchQuery, difficultyFilter, topicFilter, subjectFilter, yearFilter, tagFilter, sortOrder, questions]);
 
   const solvedQuestionIds = new Set(
     submissions.filter(s => s.correct).map(s => s.qid)
@@ -95,13 +155,13 @@ export function Practice() {
             Practice Questions
           </h1>
           <p className="text-gray-600 dark:text-gray-400">
-            {filteredQuestions.length} of {questions.length} questions available
+            {filteredAndSortedQuestions.length} of {questions.length} questions available
           </p>
         </div>
 
         <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6 mb-6">
-          <div className="flex flex-col md:flex-row gap-4">
-            <div className="flex-1 relative">
+          <div className="flex flex-col gap-4">
+            <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
               <input
                 type="text"
@@ -112,20 +172,29 @@ export function Practice() {
               />
             </div>
 
-            <div className="flex gap-3">
-              <div className="relative">
-                <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                <select
-                  value={difficultyFilter}
-                  onChange={(e) => setDifficultyFilter(e.target.value)}
-                  className="pl-10 pr-8 py-2 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-white appearance-none cursor-pointer"
-                >
-                  <option value="all">All Difficulty</option>
-                  <option value="Easy">Easy</option>
-                  <option value="Medium">Medium</option>
-                  <option value="Hard">Hard</option>
-                </select>
-              </div>
+            <div className="flex items-center flex-wrap gap-4">
+               <Filter className="w-5 h-5 text-gray-400" />
+              <select
+                value={difficultyFilter}
+                onChange={(e) => setDifficultyFilter(e.target.value)}
+                className="px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-white appearance-none cursor-pointer"
+              >
+                <option value="all">All Difficulty</option>
+                <option value="Easy">Easy</option>
+                <option value="Medium">Medium</option>
+                <option value="Hard">Hard</option>
+              </select>
+
+              <select
+                value={subjectFilter}
+                onChange={(e) => setSubjectFilter(e.target.value)}
+                className="px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-white appearance-none cursor-pointer"
+              >
+                <option value="all">All Subjects</option>
+                {subjects.map(subject => (
+                  <option key={subject} value={subject}>{subject}</option>
+                ))}
+              </select>
 
               <select
                 value={topicFilter}
@@ -137,6 +206,43 @@ export function Practice() {
                   <option key={topic} value={topic}>{topic}</option>
                 ))}
               </select>
+
+              <select
+                value={yearFilter}
+                onChange={(e) => setYearFilter(e.target.value)}
+                className="px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-white appearance-none cursor-pointer"
+              >
+                <option value="all">All Years</option>
+                {years.map(year => (
+                    <option key={year} value={year}>{year}</option>
+                ))}
+              </select>
+
+              <select
+                value={tagFilter}
+                onChange={(e) => setTagFilter(e.target.value)}
+                className="px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-white appearance-none cursor-pointer"
+              >
+                <option value="all">All Tags</option>
+                {tags.map(tag => (
+                  <option key={tag} value={tag}>{tag}</option>
+                ))}
+              </select>
+              <div className="flex-grow"></div>
+              <div className="flex items-center gap-2">
+                <ArrowDownUp className="w-5 h-5 text-gray-400" />
+                <select
+                    value={sortOrder}
+                    onChange={(e) => setSortOrder(e.target.value)}
+                    className="px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-white appearance-none cursor-pointer"
+                >
+                    <option value="default">Default</option>
+                    <option value="difficulty-asc">Difficulty: Easy to Hard</option>
+                    <option value="difficulty-desc">Difficulty: Hard to Easy</option>
+                    <option value="year-desc">Year: Newest First</option>
+                    <option value="year-asc">Year: Oldest First</option>
+                </select>
+              </div>
             </div>
           </div>
         </div>
@@ -164,7 +270,7 @@ export function Practice() {
                      </th>
                   )}
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                    Tags
+                    Details
                   </th>
                   {(userInfo?.role === 'admin' || userInfo?.role === 'moderator') && (
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
@@ -174,9 +280,8 @@ export function Practice() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
-                {filteredQuestions.map((question) => {
+                {filteredAndSortedQuestions.map((question) => {
                   const isSolved = solvedQuestionIds.has(question.id);
-
                   return (
                     <tr
                       key={question.id}
@@ -216,15 +321,13 @@ export function Practice() {
                             </span>
                         </td>
                       )}
-                       <td className="px-6 py-4">
+                       <td className="px-6 py-4 max-w-xs">
                         <div className="flex flex-wrap gap-1">
-                          <span
-                            className="px-2 py-1 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded text-xs"
-                          >
+                          <span className="px-2 py-1 bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 rounded text-xs font-medium">
                             {question.subject}
                           </span>
                            <span className="px-2 py-1 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded text-xs">
-                             GATE {question.year}
+                             {question.year}
                            </span>
                         </div>
                       </td>
@@ -243,7 +346,7 @@ export function Practice() {
           </div>
         </div>
 
-        {filteredQuestions.length === 0 && (
+        {filteredAndSortedQuestions.length === 0 && (
           <div className="text-center py-12">
             <p className="text-gray-500 dark:text-gray-400">
               No questions found matching your filters
