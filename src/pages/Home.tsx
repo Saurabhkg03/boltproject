@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Zap, Award, ArrowRight, Loader2, BookOpen } from 'lucide-react';
+import { Zap, Award, ArrowRight, BookOpen } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.tsx';
 import { db } from '../firebase.ts';
-import { collection, getDocs, query, limit } from 'firebase/firestore';
+import { collection, getDocs, query, limit, orderBy } from 'firebase/firestore';
 import { Question, User } from '../data/mockData.ts';
+import { HomeSkeleton } from '../components/Skeletons.tsx'; // Import skeleton
 
 interface SubjectStats {
   name: string;
@@ -31,25 +32,27 @@ const getColorForString = (str: string): string => {
 };
 
 export function Home() {
-  const { userInfo, isAuthenticated } = useAuth();
+  const { userInfo, isAuthenticated, loading: authLoading } = useAuth(); // Use auth loading state
   const [dailyChallenge, setDailyChallenge] = useState<Question | null>(null);
   const [leaderboard, setLeaderboard] = useState<User[]>([]);
   const [subjectStats, setSubjectStats] = useState<SubjectStats[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loadingData, setLoadingData] = useState(true); // Separate loading state for page data
 
   useEffect(() => {
     const fetchData = async () => {
-      setLoading(true);
+      setLoadingData(true); // Start data loading
       try {
-        const questionsSnapshot = await getDocs(collection(db, 'questions'));
+        // Fetch questions for subjects and daily challenge
+        const questionsQuery = query(collection(db, 'questions'), orderBy('title')); // Consistent ordering
+        const questionsSnapshot = await getDocs(questionsQuery);
         const questionsData = questionsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Question));
-        
+
+        // Calculate Subject Stats
         const subjectMap = questionsData.reduce((acc, q) => {
           const subjectName = q.subject || 'Uncategorized';
           acc[subjectName] = (acc[subjectName] || 0) + 1;
           return acc;
         }, {} as Record<string, number>);
-
         const updatedSubjects = Object.entries(subjectMap)
             .map(([name, count]) => ({
                 name,
@@ -57,40 +60,42 @@ export function Home() {
                 color: getColorForString(name),
             }))
             .sort((a, b) => a.name.localeCompare(b.name));
-            
         setSubjectStats(updatedSubjects);
 
+        // Determine Daily Challenge
         if (questionsData.length > 0) {
-          const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / (1000 * 60 * 60 * 24));
-          const challengeIndex = dayOfYear % questionsData.length;
+          const now = new Date();
+          const start = new Date(now.getFullYear(), 0, 0);
+          const diff = (now.getTime() - start.getTime()) + ((start.getTimezoneOffset() - now.getTimezoneOffset()) * 60 * 1000);
+          const oneDay = 1000 * 60 * 60 * 24;
+          const dayOfYear = Math.floor(diff / oneDay);
+          const challengeIndex = (dayOfYear - 1) % questionsData.length;
           setDailyChallenge(questionsData[challengeIndex]);
         }
-        
-        const usersQuery = query(collection(db, 'users'), limit(20));
-        const usersSnapshot = await getDocs(usersQuery);
-        let leaderboardData = usersSnapshot.docs.map(doc => doc.data() as User);
 
-        leaderboardData.sort((a, b) => (b.stats.accuracy || 0) - (a.stats.accuracy || 0));
-        
-        setLeaderboard(leaderboardData.slice(0, 5));
+        // Fetch Top Users for Leaderboard Preview
+        const usersQuery = query(collection(db, 'users'), orderBy('stats.accuracy', 'desc'), orderBy('stats.correct', 'desc'), limit(5));
+        const usersSnapshot = await getDocs(usersQuery);
+        const leaderboardData = usersSnapshot.docs.map(doc => doc.data() as User);
+        setLeaderboard(leaderboardData);
 
       } catch (error) {
         console.error("Error fetching home page data:", error);
+        // Handle error states if necessary, e.g., show an error message
         setSubjectStats([]);
+        setLeaderboard([]);
+        setDailyChallenge(null);
       } finally {
-        setLoading(false);
+        setLoadingData(false); // Finish data loading
       }
     };
 
     fetchData();
-  }, []);
+  }, []); // Run only once on mount
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-transparent">
-        <Loader2 className="w-12 h-12 text-blue-500 animate-spin" />
-      </div>
-    );
+  // Show skeleton if either auth is loading OR page data is loading
+  if (authLoading || loadingData) {
+    return <HomeSkeleton />;
   }
 
   return (
@@ -113,7 +118,7 @@ export function Home() {
           </div>
         )}
       </div>
-      
+
       {isAuthenticated && dailyChallenge && (
         <div className="mb-16 glass-card p-6 md:p-8 border-blue-500/20">
           <div className="flex flex-col md:flex-row items-center gap-4 md:gap-8">
@@ -149,7 +154,7 @@ export function Home() {
                 to="/practice"
                 state={{ subject: subject.name }}
                 className={`glass-card p-6 transition-all duration-300 group ${
-                  subject.count > 0 
+                  subject.count > 0
                     ? 'hover:shadow-xl hover:-translate-y-1'
                     : 'opacity-60 cursor-not-allowed'
                 }`}
@@ -173,6 +178,12 @@ export function Home() {
                 </div>
               </Link>
             ))}
+             {/* Add placeholder if no subjects loaded yet but not loading */}
+             {subjectStats.length === 0 && !loadingData && (
+                <p className="md:col-span-2 text-center text-slate-500 dark:text-slate-400 py-6">
+                    No subjects found. Add questions in the admin panel.
+                </p>
+             )}
           </div>
         </div>
 
