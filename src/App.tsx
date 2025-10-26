@@ -1,7 +1,9 @@
 import { BrowserRouter, Routes, Route, useLocation, Navigate } from 'react-router-dom';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { DailyChallengeProvider } from './contexts/DailyChallengeContext.tsx';
 import { Navbar } from './components/Navbar';
+import { ProtectedRoute } from './components/ProtectedRoute.tsx'; // <-- Added .tsx extension
 import { Home } from './pages/Home';
 import { Practice } from './pages/Practice';
 import { QuestionDetail } from './pages/QuestionDetail';
@@ -15,7 +17,7 @@ import { useEffect } from 'react';
 import { NotFound } from './pages/NotFound';
 
 const AppContent = () => {
-  const { userInfo, loading } = useAuth();
+  const { userInfo, loading, isAuthenticated } = useAuth(); // <-- Added isAuthenticated
   const location = useLocation();
 
   useEffect(() => {
@@ -41,27 +43,63 @@ const AppContent = () => {
     return null;
   }
 
-  // Once loading is false, handle redirects or render the main app.
-  if (userInfo && userInfo.needsSetup && location.pathname !== '/settings') {
+  // Handle initial profile setup redirect *only if authenticated*
+  if (isAuthenticated && userInfo && userInfo.needsSetup && location.pathname !== '/settings') {
     return <Navigate to="/settings" state={{ from: location }} replace />;
   }
 
   return (
     <>
-      <Navbar />
+      {/* Only show Navbar if not on the login page */}
+      {location.pathname !== '/login' && <Navbar />}
       <main className="relative z-10">
         <Routes>
+          {/* Public Routes */}
           <Route path="/" element={<Home />} />
           <Route path="/practice" element={<Practice />} />
-          <Route path="/question/:id" element={<QuestionDetail />} />
           <Route path="/leaderboard" element={<Leaderboard />} />
-          <Route path="/profile/:username" element={<Profile />} />
-          <Route path="/settings" element={<Settings />} />
           <Route path="/login" element={<Login />} />
-          <Route path="/admin" element={<AdminPanel />} />
-          <Route path="/add-question" element={<AddQuestion />} />
-          <Route path="/edit-question/:id" element={<AddQuestion />} />
-          <Route path="*" element={<NotFound />} /> {/* Add this wildcard route */}
+          <Route path="/profile/:username" element={<Profile />} /> {/* Profile might be public? Check logic inside */}
+          {/* Make Question Detail public */}
+          <Route path="/question/:id" element={<QuestionDetail />} />
+
+
+          {/* Protected Routes */}
+           <Route
+            path="/settings"
+            element={
+              <ProtectedRoute>
+                <Settings />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin"
+            element={
+              <ProtectedRoute allowedRoles={['admin', 'moderator']}> {/* Restrict by role */}
+                <AdminPanel />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/add-question"
+            element={
+              <ProtectedRoute allowedRoles={['admin', 'moderator']}> {/* Restrict by role */}
+                <AddQuestion />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/edit-question/:id"
+            element={
+              <ProtectedRoute allowedRoles={['admin', 'moderator']}> {/* Restrict by role */}
+                <AddQuestion />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Fallback Not Found Route */}
+          <Route path="*" element={<NotFound />} />
         </Routes>
       </main>
     </>
@@ -73,9 +111,12 @@ function App() {
     <ThemeProvider>
       <BrowserRouter>
         <AuthProvider>
-          <div className="min-h-screen bg-slate-50 dark:bg-slate-950 bg-gradient-to-br from-slate-50 to-slate-200 dark:from-slate-950 dark:to-slate-800">
+         <DailyChallengeProvider>
+          {/* Apply gradient/base styles here if needed globally */}
+          <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
             <AppContent />
           </div>
+         </DailyChallengeProvider>
         </AuthProvider>
       </BrowserRouter>
     </ThemeProvider>
