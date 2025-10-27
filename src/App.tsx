@@ -15,9 +15,10 @@ import { AddQuestion } from './pages/AddQuestion';
 import { Settings } from './pages/Settings';
 import { useEffect } from 'react';
 import { NotFound } from './pages/NotFound';
+// NOTE: Removed Loader2 import as it's not used when returning null or using the HTML loader
 
 const AppContent = () => {
-  const { userInfo, loading, isAuthenticated } = useAuth(); // <-- Added isAuthenticated
+  const { userInfo, loading, isAuthenticated } = useAuth(); // <-- Added isAuthenticated and reverted to 'loading'
   const location = useLocation();
 
   useEffect(() => {

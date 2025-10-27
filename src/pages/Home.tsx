@@ -128,7 +128,7 @@ export function Home() {
               <div className="flex-1 text-center md:text-left">
                 <h2 className="text-2xl font-bold text-slate-800 dark:text-white">Daily Challenge</h2>
                 <p className="text-slate-600 dark:text-slate-300 mt-1">
-                  "{dailyChallenge.title}" from **{dailyChallenge.subject}**. Give it a shot!
+                  "{dailyChallenge.title}" from {dailyChallenge.subject}. Give it a shot!
                 </p>
               </div>
               <Link
