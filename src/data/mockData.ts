@@ -40,6 +40,7 @@ export interface User {
   avatar?: string;
   role?: 'admin' | 'moderator' | 'user';
   needsSetup?: boolean;
+  rating?: number; // Renamed from score
 }
 
 export interface Submission {
@@ -56,3 +57,4 @@ export interface UserQuestionData {
     isMarkedAsDoubt?: boolean;
     note?: string;
 }
+

@@ -9,12 +9,13 @@ import {
   User as FirebaseUser,
   deleteUser,
   sendEmailVerification, // Import sendEmailVerification
-  updateProfile // Import updateProfile
+  updateProfile,         // Import updateProfile
+  sendPasswordResetEmail // Import sendPasswordResetEmail
 } from 'firebase/auth';
-import { doc, setDoc, getDoc, collection, query, where, getDocs, deleteDoc, orderBy } from 'firebase/firestore';
-// Correct the import path for firebase
-import { auth, db } from '../firebase.ts';
-import { User, Submission } from '../data/mockData';
+import { doc, setDoc, getDoc, collection, query, where, getDocs, deleteDoc, orderBy, writeBatch } from 'firebase/firestore'; // Added writeBatch
+// Attempting to fix import path by removing extension
+import { auth, db } from '../firebase';
+import { User, Submission, UserQuestionData } from '../data/mockData';
 
 interface AuthContextType {
   user: FirebaseUser | null;
@@ -23,6 +24,7 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<void>;
   signup: (name: string, username: string, email: string, password: string) => Promise<void>;
   loginWithGoogle: () => Promise<void>;
+  resetPassword: (email: string) => Promise<void>; // Added resetPassword
   logout: () => void;
   deleteAccount: () => Promise<void>;
   isAuthenticated: boolean;
@@ -40,39 +42,60 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      setUser(currentUser);
-      if (currentUser) {
-        // Only fetch user info if email is verified for email/password users
-        // Google users are considered verified by default through the provider
-        if (currentUser.providerData.some(p => p.providerId === 'google.com') || currentUser.emailVerified) {
-          const userDocRef = doc(db, 'users', currentUser.uid);
-          const userDocSnap = await getDoc(userDocRef);
-          if (userDocSnap.exists()) {
-            setUserInfo(userDocSnap.data() as User);
-          } else {
-             // Handle case where Firestore doc might be missing for a verified user (e.g., deleted manually)
-             console.warn("User document not found in Firestore for verified user:", currentUser.uid);
-             setUserInfo(null); // Or attempt to recreate it
-          }
+        console.log("Auth State Changed:", currentUser ? `UID: ${currentUser.uid}, Verified: ${currentUser.emailVerified}` : 'No User');
+        setUser(currentUser);
+        if (currentUser) {
+            // Check if email verified OR if it's a Google Sign-in
+            const isGoogleProvider = currentUser.providerData.some(provider => provider.providerId === GoogleAuthProvider.PROVIDER_ID);
+            if (currentUser.emailVerified || isGoogleProvider) {
+                try {
+                    const userDocRef = doc(db, 'users', currentUser.uid);
+                    const userDocSnap = await getDoc(userDocRef);
+                    if (userDocSnap.exists()) {
+                        console.log("User data found in Firestore:", userDocSnap.data());
+                        setUserInfo(userDocSnap.data() as User);
+                    } else if (isGoogleProvider) {
+                         // Handle case where Google user exists in Auth but not Firestore (might happen on first login with existing Auth account)
+                        console.log("Google user exists in Auth but not Firestore. Creating Firestore doc.");
+                        const newUser: User = {
+                            uid: currentUser.uid,
+                            name: currentUser.displayName || 'New User',
+                            username: `user_${currentUser.uid.slice(-6)}`, // Temporary username
+                            email: currentUser.email || '',
+                            joined: new Date().toISOString(),
+                            stats: { attempted: 0, correct: 0, accuracy: 0 },
+                            avatar: currentUser.photoURL || '/user.png',
+                            role: 'user',
+                            needsSetup: !currentUser.displayName // Needs setup if no display name from Google
+                        };
+                         await setDoc(userDocRef, newUser);
+                         setUserInfo(newUser);
+                    } else {
+                        console.log("User exists in Auth but not Firestore and is not Google provider. UserInfo not set.");
+                        setUserInfo(null); // Explicitly set to null if Firestore doc doesn't exist for non-Google users
+                    }
+                } catch (error) {
+                    console.error("Error fetching user data from Firestore:", error);
+                    setUserInfo(null); // Clear userInfo on error
+                }
+            } else {
+                 console.log("User email not verified. UserInfo not set.");
+                 setUserInfo(null); // Clear userInfo if email is not verified (for email/password users)
+            }
         } else {
-          // If email/password user exists but email is not verified, don't set userInfo
-          console.log("User email not verified:", currentUser.email);
-          setUserInfo(null);
-          // Optional: You could trigger a re-send verification email UI here if needed
+            setUserInfo(null); // Clear userInfo if no user
         }
-      } else {
-        setUserInfo(null);
-      }
-      setLoading(false);
+        setLoading(false);
     });
     return unsubscribe;
-  }, []);
+  }, []); // Run only once on mount
 
-  // Recalculate streak when userInfo changes (after login/verification)
    useEffect(() => {
     const calculateStreak = async () => {
-      if (user && userInfo) { // Only calculate if both user and userInfo are available
+      // Calculate streak only if we have a valid user and userInfo
+      if (user && userInfo) {
         try {
+          // ... (streak calculation logic remains the same) ...
           const submissionsQuery = query(
             collection(db, `users/${user.uid}/submissions`),
             orderBy('timestamp', 'desc')
@@ -91,56 +114,57 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                   const today = new Date(); today.setHours(0,0,0,0);
                   const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
 
-                  // Check if most recent submission was today or yesterday
                   const isToday = submissionDates[0].getTime() === today.getTime();
                   const isYesterday = submissionDates[0].getTime() === yesterday.getTime();
 
                   if (isToday || isYesterday) {
-                      currentStreak = 1; // Start streak if active today/yesterday
-                      // Iterate through older dates to extend streak
+                      currentStreak = 1;
                       for (let i = 0; i < submissionDates.length - 1; i++) {
-                          const diffDays = (submissionDates[i].getTime() - submissionDates[i+1].getTime()) / (1000 * 3600 * 24);
-                          if (diffDays === 1) { // If consecutive days
+                          const diff = (submissionDates[i].getTime() - submissionDates[i+1].getTime()) / (1000 * 3600 * 24);
+                          if (diff === 1) { // Check for exactly 1 day difference
                               currentStreak++;
-                          } else if (diffDays > 1) { // If gap larger than 1 day
-                              break; // Streak broken
+                          } else if (diff > 1) { // Break if gap is larger than 1 day
+                              break;
                           }
-                          // Ignore if diffDays <= 0 (same day submissions)
+                          // Ignore if diff <= 0 (same day submissions)
                       }
                   }
               }
           }
+          console.log("Calculated Streak:", currentStreak);
           setStreak(currentStreak);
         } catch (error) {
           console.error("Failed to calculate streak:", error);
           setStreak(0);
         }
       } else {
-        setStreak(0); // Reset streak if user logs out or userInfo is not loaded
+        setStreak(0); // Reset streak if no user or userInfo
       }
     };
 
     calculateStreak();
-  }, [user, userInfo]); // Depend on user and userInfo
+  }, [user, userInfo]); // Depend on both user and userInfo
+
 
   const login = async (email: string, password: string) => {
     const userCredential = await signInWithEmailAndPassword(auth, email, password);
-    // Check if email is verified after successful sign-in
+    // Check verification status AFTER successful sign-in
     if (!userCredential.user.emailVerified) {
-       // Log out the user immediately if email is not verified
-      await signOut(auth);
-      // Throw a specific error to be caught in the UI
-      throw new Error('auth/email-not-verified');
+        // If not verified, sign the user out immediately and throw specific error
+        await signOut(auth);
+        console.log("Login attempt failed: Email not verified.");
+        throw new Error('auth/email-not-verified'); // Throw specific error message
     }
-     // If verified, onAuthStateChanged will handle setting user and userInfo
+     console.log("Login successful, email verified.");
+     // No need to set user/userInfo here, onAuthStateChanged handles it
   };
 
   const signup = async (name: string, username: string, email: string, password: string) => {
-    // --- Username validation ---
     const saneUsername = username.toLowerCase().replace(/[^a-z0-9_]/g, '');
     if (saneUsername.length < 3) {
       throw new Error('Username must be at least 3 characters and contain only letters, numbers, or underscores.');
     }
+    // Check if username exists
     const usersRef = collection(db, 'users');
     const q = query(usersRef, where('username', '==', saneUsername));
     const querySnapshot = await getDocs(q);
@@ -148,133 +172,141 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw new Error('Username already exists. Please choose another one.');
     }
 
-    // --- Create user account ---
+    // Create user in Auth
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-    const firebaseUser = userCredential.user;
+    console.log("User created in Auth:", userCredential.user.uid);
 
-    // --- Send verification email ---
+     // --- Send verification email ---
     try {
-      await sendEmailVerification(firebaseUser);
-       console.log("Verification email sent to:", firebaseUser.email);
-    } catch (error) {
-        console.error("Error sending verification email:", error);
-        // Decide how to handle this - maybe delete the user or just log the error?
-        // For now, let's log and continue, but inform the user potentially.
-        // If critical, you might want to delete the created user: await deleteUser(firebaseUser);
-        throw new Error("Could not send verification email. Please try signing up again later.");
+        await sendEmailVerification(userCredential.user);
+        console.log("Verification email sent to:", email);
+    } catch (verificationError) {
+         console.error("Error sending verification email:", verificationError);
+         // Decide how to handle this - maybe delete the user or just inform them?
+         // For now, let's proceed but maybe add a flag to the user doc later
+         // Consider deleting the auth user if verification email fails critically
+         // await deleteUser(userCredential.user); // Uncomment carefully
+         // throw new Error("Could not send verification email. Please try signing up again.");
     }
 
-     // --- Update Auth Profile (Display Name) ---
-    try {
-        await updateProfile(firebaseUser, { displayName: name });
-    } catch (error) {
-        console.error("Error updating auth profile display name:", error);
-        // Non-critical, continue profile creation
-    }
-
+    // --- Update Auth profile (Display Name) ---
+     try {
+         await updateProfile(userCredential.user, { displayName: name });
+         console.log("Auth profile display name updated.");
+     } catch (profileError) {
+         console.error("Error updating Auth profile display name:", profileError);
+         // Non-critical, proceed but log error
+     }
 
     // --- Create user document in Firestore ---
     const newUser: User = {
-      uid: firebaseUser.uid,
+      uid: userCredential.user.uid,
       name,
       username: saneUsername,
       email: email,
       joined: new Date().toISOString(),
-      stats: {
-        attempted: 0,
-        correct: 0,
-        accuracy: 0
-      },
-      avatar: firebaseUser.photoURL || '/user.png',
+      stats: { attempted: 0, correct: 0, accuracy: 0 },
+      avatar: userCredential.user.photoURL || '/user.png',
       role: 'user',
-      needsSetup: false, // User provided name/username during signup
+      needsSetup: false, // Set to false as name/username are provided
     };
-    try {
-      await setDoc(doc(db, 'users', newUser.uid), newUser);
-      // Don't set userInfo here, let onAuthStateChanged handle it after verification
-      // setUserInfo(newUser);
-    } catch (error) {
-       console.error("Error creating user document in Firestore:", error);
-       // Critical error - might want to delete the auth user if Firestore fails
-       // await deleteUser(firebaseUser); // Consider this for consistency
-       throw new Error("Failed to save user data. Please try signing up again.");
-    }
-    // Note: User is created but cannot log in until verified.
+    await setDoc(doc(db, 'users', newUser.uid), newUser);
+    console.log("User document created in Firestore for:", newUser.uid);
+
+    // Don't setUserInfo here. Let onAuthStateChanged handle it after verification.
+    // Sign the user out immediately after signup to force verification before login
+    await signOut(auth);
+    console.log("User signed out pending email verification.");
   };
+
+   // --- Added resetPassword function ---
+   const resetPassword = async (email: string) => {
+        await sendPasswordResetEmail(auth, email);
+        console.log("Password reset email sent to:", email);
+   };
+
 
   const loginWithGoogle = async () => {
     const provider = new GoogleAuthProvider();
     const userCredential = await signInWithPopup(auth, provider);
-    const googleUser = userCredential.user; // Renamed to avoid conflict
+    const googleUser = userCredential.user;
 
     const userDocRef = doc(db, 'users', googleUser.uid);
     const userDocSnap = await getDoc(userDocRef);
 
     if (!userDocSnap.exists()) {
-      // --- Check if username needs generation (avoid collisions) ---
-      let potentialUsername = googleUser.email ? googleUser.email.split('@')[0].toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 15) : `user_${googleUser.uid.slice(-6)}`;
-      if (potentialUsername.length < 3) potentialUsername = `user_${googleUser.uid.slice(-6)}`; // Ensure min length
+        console.log("Google Sign-in: First time user. Creating Firestore doc.");
+        let usernameToSet = googleUser.email ? googleUser.email.split('@')[0].toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 15) : `user_${googleUser.uid.slice(-6)}`;
+        if (usernameToSet.length < 3) usernameToSet = `user_${googleUser.uid.slice(-6)}`; // Ensure min length
 
-      // Check if generated username exists
-      const usersRef = collection(db, 'users');
-      let usernameExists = true;
-      let finalUsername = potentialUsername;
-      let counter = 1;
-      while (usernameExists) {
-        const q = query(usersRef, where('username', '==', finalUsername));
-        const querySnapshot = await getDocs(q);
-        if (querySnapshot.empty) {
-          usernameExists = false;
-        } else {
-          finalUsername = `${potentialUsername}_${counter++}`; // Append counter if exists
-          if (finalUsername.length > 20) finalUsername = `user_${googleUser.uid.slice(-6)}_${counter-1}`; // Fallback if too long
+        // Check if generated username exists
+        let usernameExists = true;
+        let finalUsername = usernameToSet;
+        let counter = 1;
+        while(usernameExists) {
+            const usersRef = collection(db, 'users');
+            const q = query(usersRef, where('username', '==', finalUsername));
+            const querySnapshot = await getDocs(q);
+            if (querySnapshot.empty) {
+                usernameExists = false;
+            } else {
+                finalUsername = `${usernameToSet}_${counter}`;
+                counter++;
+                console.log(`Username exists, trying: ${finalUsername}`);
+            }
         }
-      }
 
-      // --- Create user document ---
-      const newUser: User = {
-        uid: googleUser.uid,
-        name: googleUser.displayName || 'New User',
-        username: finalUsername,
-        email: googleUser.email || '',
-        joined: new Date().toISOString(),
-        stats: {
-          attempted: 0,
-          correct: 0,
-          accuracy: 0,
-        },
-        avatar: googleUser.photoURL || '/user.png',
-        role: 'user',
-        needsSetup: !googleUser.displayName, // Mark for setup if name is missing
-      };
-      await setDoc(userDocRef, newUser);
-      // setUserInfo(newUser); // Let onAuthStateChanged handle this
+        const newUser: User = {
+            uid: googleUser.uid,
+            name: googleUser.displayName || 'New User',
+            username: finalUsername, // Use the unique username
+            email: googleUser.email || '',
+            joined: new Date().toISOString(),
+            stats: { attempted: 0, correct: 0, accuracy: 0 },
+            avatar: googleUser.photoURL || '/user.png',
+            role: 'user',
+            needsSetup: !googleUser.displayName // Needs setup if no display name from Google
+        };
+        await setDoc(userDocRef, newUser);
+        // setUserInfo(newUser); // Let onAuthStateChanged handle this
+        console.log("Firestore doc created for Google user:", newUser.uid);
     } else {
-      // User exists, update avatar/name if changed? (Optional)
-      const existingData = userDocSnap.data() as User;
-      const updates: Partial<User> = {};
-      if (googleUser.photoURL && existingData.avatar !== googleUser.photoURL) {
-          updates.avatar = googleUser.photoURL;
-      }
-      if (googleUser.displayName && existingData.name !== googleUser.displayName) {
-          updates.name = googleUser.displayName;
-           // If name was missing, mark setup as complete if user didn't set it manually yet
-          if (existingData.needsSetup) {
-              updates.needsSetup = false;
-          }
-      }
-      if (Object.keys(updates).length > 0) {
-          await setDoc(userDocRef, updates, { merge: true });
-      }
-      // setUserInfo(userDocSnap.data() as User); // Let onAuthStateChanged handle this
+        console.log("Google Sign-in: Existing user. Firestore doc exists.");
+        // setUserInfo(userDocSnap.data() as User); // Let onAuthStateChanged handle this
     }
-     // onAuthStateChanged will trigger and update user/userInfo state correctly
+     // No need to navigate here, onAuthStateChanged will trigger update and AppContent handles redirect if needed
   };
 
   const logout = () => {
     signOut(auth);
-    // State (user, userInfo, streak) will be cleared by onAuthStateChanged
+    console.log("User signed out.");
   };
+
+  // Helper function to delete subcollections
+  async function deleteCollection(collectionPath: string) {
+    const q = query(collection(db, collectionPath));
+    const snapshot = await getDocs(q);
+
+    // Use chunks if the collection might be very large
+    const MAX_WRITES_PER_BATCH = 500;
+    let batch = writeBatch(db);
+    let count = 0;
+    for (const docSnapshot of snapshot.docs) {
+        batch.delete(docSnapshot.ref);
+        count++;
+        if (count === MAX_WRITES_PER_BATCH) {
+            await batch.commit();
+            batch = writeBatch(db); // Start a new batch
+            count = 0;
+        }
+    }
+    // Commit the remaining deletes
+    if (count > 0) {
+        await batch.commit();
+    }
+    console.log(`Deleted ${snapshot.size} documents from subcollection: ${collectionPath}`);
+  }
+
 
   const deleteAccount = async () => {
     const currentUser = auth.currentUser;
@@ -283,41 +315,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      // 1. Delete Firestore user document
-      const userDocRef = doc(db, 'users', currentUser.uid);
-      await deleteDoc(userDocRef);
+        console.log("Attempting to delete account for user:", currentUser.uid);
+        // 1. Delete Firestore subcollections first
+        await deleteCollection(`users/${currentUser.uid}/submissions`);
+        await deleteCollection(`users/${currentUser.uid}/userQuestionData`);
 
-      // 2. Delete associated submissions (Optional but recommended for cleanup)
-      // This can be slow if there are many submissions. Consider a Cloud Function for large scale deletion.
-      const submissionsQuery = query(collection(db, `users/${currentUser.uid}/submissions`));
-      const submissionsSnapshot = await getDocs(submissionsQuery);
-      const deletePromises: Promise<void>[] = [];
-      submissionsSnapshot.forEach((docSnap) => {
-        deletePromises.push(deleteDoc(doc(db, `users/${currentUser.uid}/submissions`, docSnap.id)));
-      });
-      await Promise.all(deletePromises);
-      console.log(`Deleted ${deletePromises.length} submissions for user ${currentUser.uid}`);
-      // Also delete userQuestionData if it exists
-       const userQuestionDataQuery = query(collection(db, `users/${currentUser.uid}/userQuestionData`));
-       const userQuestionDataSnapshot = await getDocs(userQuestionDataQuery);
-       const deleteDataPromises: Promise<void>[] = [];
-       userQuestionDataSnapshot.forEach((docSnap) => {
-         deleteDataPromises.push(deleteDoc(doc(db, `users/${currentUser.uid}/userQuestionData`, docSnap.id)));
-       });
-       await Promise.all(deleteDataPromises);
-       console.log(`Deleted ${deleteDataPromises.length} userQuestionData entries for user ${currentUser.uid}`);
+        // 2. Delete main user document
+        const userDocRef = doc(db, 'users', currentUser.uid);
+        await deleteDoc(userDocRef);
+        console.log("Firestore user document and subcollections deleted.");
 
+        // 3. Delete Auth user
+        await deleteUser(currentUser);
+        console.log("Firebase Auth user deleted.");
 
-      // 3. Delete Firebase Auth user
-      await deleteUser(currentUser);
+        // Clear local state immediately
+        setUserInfo(null);
+        setUser(null);
+        setStreak(0);
 
-      // State is cleared automatically by onAuthStateChanged after deleteUser triggers it
-      // setUserInfo(null);
-      // setUser(null);
-
-    } catch (error) {
-      console.error("Error deleting account:", error);
-      throw error; // Re-throw to handle in UI (e.g., prompt re-authentication)
+    } catch (error: any) {
+        console.error("Error deleting account:", error);
+        // Re-throw the error for the component to handle specific cases like re-authentication
+        throw error;
     }
   };
 
@@ -330,13 +350,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       login,
       signup,
       loginWithGoogle,
+      resetPassword, // Added resetPassword
       logout,
       deleteAccount,
-      isAuthenticated: !!user && !!userInfo, // User is authenticated AND has profile info (implies verified for email/pass)
+      // User is authenticated IF firebase auth user exists AND userInfo is loaded (implies verification for email/pass)
+      isAuthenticated: !!user && !!userInfo,
       loading,
       streak
     }}>
-      {children} {/* Render children immediately, UI might show loader based on loading state */}
+      {!loading && children}
     </AuthContext.Provider>
   );
 }

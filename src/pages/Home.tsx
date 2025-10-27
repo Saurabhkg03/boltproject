@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Zap, Award, ArrowRight, BookOpen } from 'lucide-react';
-import { useAuth } from '../contexts/AuthContext.tsx';
-import { db } from '../firebase.ts';
+import { Zap, ArrowRight, BookOpen, BarChart } from 'lucide-react'; // Changed Award to BarChart
+// Corrected import paths to be relative
+import { useAuth } from '../contexts/AuthContext';
+import { db } from '../firebase';
 import { collection, getDocs, query, limit, orderBy } from 'firebase/firestore';
-import { Question, User } from '../data/mockData.ts';
-import { HomeSkeleton } from '../components/Skeletons.tsx'; // Import skeleton
+import { Question, User } from '../data/mockData'; // User interface includes 'rating'
+import { HomeSkeleton } from '../components/Skeletons'; // Import skeleton
 
 interface SubjectStats {
   name: string;
@@ -31,10 +32,19 @@ const getColorForString = (str: string): string => {
   return COLORS[index];
 };
 
+// --- RATING FUNCTION (copied from Leaderboard.tsx) ---
+const RATING_SCALING_FACTOR = 100;
+const calculateRating = (accuracy: number | undefined, correct: number | undefined): number => {
+    const safeAccuracy = accuracy ?? 0;
+    const safeCorrect = correct ?? 0;
+    const rating = Math.max(0, (safeAccuracy / 100) * Math.log10(safeCorrect + 1) * RATING_SCALING_FACTOR);
+    return parseFloat(rating.toFixed(2));
+};
+
 export function Home() {
   const { userInfo, isAuthenticated, loading: authLoading } = useAuth(); // Use auth loading state
   const [dailyChallenge, setDailyChallenge] = useState<Question | null>(null);
-  const [leaderboard, setLeaderboard] = useState<User[]>([]);
+  const [leaderboardPreview, setLeaderboardPreview] = useState<User[]>([]); // Renamed state
   const [subjectStats, setSubjectStats] = useState<SubjectStats[]>([]);
   const [loadingData, setLoadingData] = useState(true); // Separate loading state for page data
 
@@ -69,21 +79,44 @@ export function Home() {
           const diff = (now.getTime() - start.getTime()) + ((start.getTimezoneOffset() - now.getTimezoneOffset()) * 60 * 1000);
           const oneDay = 1000 * 60 * 60 * 24;
           const dayOfYear = Math.floor(diff / oneDay);
-          const challengeIndex = (dayOfYear - 1) % questionsData.length;
+          const challengeIndex = (dayOfYear - 1 + questionsData.length) % questionsData.length; // Ensure positive index
           setDailyChallenge(questionsData[challengeIndex]);
         }
 
-        // Fetch Top Users for Leaderboard Preview
-        const usersQuery = query(collection(db, 'users'), orderBy('stats.accuracy', 'desc'), orderBy('stats.correct', 'desc'), limit(5));
+        // --- Fetch and Process Top Users for Leaderboard Preview ---
+        // Query ordered primarily by correct count
+        const usersQuery = query(collection(db, 'users'), orderBy('stats.correct', 'desc'), orderBy('stats.accuracy', 'desc'), limit(5));
         const usersSnapshot = await getDocs(usersQuery);
-        const leaderboardData = usersSnapshot.docs.map(doc => doc.data() as User);
-        setLeaderboard(leaderboardData);
+        const fetchedUsers = usersSnapshot.docs.map(doc => {
+             const data = doc.data() as User;
+             // Ensure stats exist
+            if (!data.stats) {
+                data.stats = { attempted: 0, correct: 0, accuracy: 0 };
+            } else {
+                 data.stats.attempted = data.stats.attempted ?? 0;
+                 data.stats.correct = data.stats.correct ?? 0;
+                 data.stats.accuracy = data.stats.accuracy ?? 0;
+            }
+            return data;
+        });
+
+        // Calculate rating for each fetched user
+        const usersWithRating = fetchedUsers.map(user => ({
+            ...user,
+            rating: calculateRating(user.stats?.accuracy, user.stats?.correct)
+        }));
+
+        // Re-sort client-side based on the calculated rating
+        usersWithRating.sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0));
+
+        // Set the top 5 (or fewer) based on the calculated rating
+        setLeaderboardPreview(usersWithRating.slice(0, 5));
+        // --- End Leaderboard Preview Update ---
 
       } catch (error) {
         console.error("Error fetching home page data:", error);
-        // Handle error states if necessary, e.g., show an error message
         setSubjectStats([]);
-        setLeaderboard([]);
+        setLeaderboardPreview([]);
         setDailyChallenge(null);
       } finally {
         setLoadingData(false); // Finish data loading
@@ -100,6 +133,7 @@ export function Home() {
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 md:py-20">
+      {/* Header Section */}
       <div className="text-center mb-16">
         <h1 className="text-4xl md:text-6xl font-extrabold text-slate-900 dark:text-white mb-4 tracking-tight">
           Practice. Analyze. <span className="text-blue-500">Master GATE.</span>
@@ -107,18 +141,21 @@ export function Home() {
         <p className="text-lg md:text-xl text-slate-600 dark:text-slate-400 max-w-3xl mx-auto">
           Your complete platform for GATE Electronics & Communication preparation, with curated questions, performance tracking, and community leaderboards.
         </p>
+        {/* Welcome Message */}
         {isAuthenticated && userInfo && (
           <div className="mt-8 inline-block glass-card p-4">
             <p className="text-lg text-slate-700 dark:text-slate-300">
               Welcome back, <span className="font-semibold text-blue-600 dark:text-blue-300">{userInfo.name}</span>!
             </p>
+            {/* Display Rating instead of Accuracy */}
             <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-              Current Accuracy: <span className="font-semibold text-green-600 dark:text-green-400">{(userInfo.stats.accuracy || 0).toFixed(1)}%</span>
+               Current Rating: <span className="font-semibold text-blue-600 dark:text-blue-400">{calculateRating(userInfo.stats.accuracy, userInfo.stats.correct)}</span>
             </p>
           </div>
         )}
       </div>
 
+      {/* Daily Challenge Section */}
       {isAuthenticated && dailyChallenge && (
         <div className="mb-16 glass-card p-6 md:p-8 border-blue-500/20">
           <div className="flex flex-col md:flex-row items-center gap-4 md:gap-8">
@@ -142,7 +179,9 @@ export function Home() {
         </div>
       )}
 
+      {/* Main Grid: Subjects & Leaderboard Preview */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-16">
+        {/* Subjects Section */}
         <div className="lg:col-span-2">
           <h2 className="text-3xl font-bold text-slate-900 dark:text-white mb-6">
             Subjects Overview
@@ -178,7 +217,7 @@ export function Home() {
                 </div>
               </Link>
             ))}
-             {/* Add placeholder if no subjects loaded yet but not loading */}
+             {/* Placeholder if no subjects */}
              {subjectStats.length === 0 && !loadingData && (
                 <p className="md:col-span-2 text-center text-slate-500 dark:text-slate-400 py-6">
                     No subjects found. Add questions in the admin panel.
@@ -187,6 +226,7 @@ export function Home() {
           </div>
         </div>
 
+        {/* Leaderboard Preview Section */}
         <div className="glass-card p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-2xl font-bold text-slate-900 dark:text-white">
@@ -197,11 +237,13 @@ export function Home() {
             </Link>
           </div>
           <div className="space-y-4">
-            {leaderboard.length === 0 ? (
+            {leaderboardPreview.length === 0 ? (
               <p className="p-4 text-center text-slate-500 dark:text-slate-400">No users yet.</p>
             ) : (
-              leaderboard.map((leader, index) => (
+              // Display users sorted by calculated rating
+              leaderboardPreview.map((leader, index) => (
                 <div key={leader.uid} className="flex items-center gap-4">
+                  {/* Rank */}
                   <div className={`w-8 h-8 flex items-center justify-center rounded-full font-bold text-sm ${
                     index === 0 ? 'bg-yellow-400 text-white' :
                     index === 1 ? 'bg-slate-400 text-white' :
@@ -210,16 +252,19 @@ export function Home() {
                   }`}>
                     {index + 1}
                   </div>
-                  <img src={leader.avatar || '/user.png'} alt={leader.name} className="w-10 h-10 rounded-full object-cover" />
+                  {/* Avatar */}
+                  <img src={leader.avatar || '/user.png'} alt={leader.name} className="w-10 h-10 rounded-full object-cover border dark:border-slate-700" onError={(e) => { e.currentTarget.src = '/user.png'; }}/>
+                  {/* Name & Solved */}
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-slate-800 dark:text-white truncate">{leader.name}</p>
                     <p className="text-sm text-slate-500 dark:text-slate-400">
-                      {leader.stats.correct || 0}/{leader.stats.attempted || 0} solved
+                      {leader.stats.correct || 0} solved
                     </p>
                   </div>
-                  <div className="flex items-center gap-1 text-green-600 dark:text-green-400">
-                    <Award className="w-4 h-4" />
-                    <span className="font-semibold text-sm">{(leader.stats.accuracy || 0).toFixed(1)}%</span>
+                  {/* Rating */}
+                  <div className="flex items-center gap-1 text-blue-600 dark:text-blue-400" title="Performance Rating">
+                    <BarChart className="w-4 h-4" />
+                    <span className="font-semibold text-sm">{leader.rating ?? 0}</span>
                   </div>
                 </div>
               ))
@@ -228,6 +273,7 @@ export function Home() {
         </div>
       </div>
 
+      {/* Call to Action (if not logged in) */}
       {!isAuthenticated && (
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-12 md:pb-20">
             <div className="glass-card p-8 text-center">

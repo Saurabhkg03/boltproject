@@ -1,13 +1,24 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { Trophy, Award, Target, Crown, ChevronLeft, ChevronRight } from 'lucide-react'; // Removed Loader2
-import { db } from '../firebase.ts';
+import { Trophy, Target, Crown, ChevronLeft, ChevronRight, BarChart, Info, X } from 'lucide-react';
+// Corrected import paths (removed extensions)
+import { db } from '../firebase';
 import { collection, getDocs, query, orderBy, limit, startAfter, getCountFromServer, DocumentSnapshot, endBefore, limitToLast } from 'firebase/firestore';
-import { User } from '../data/mockData.ts';
-import { useAuth } from '../contexts/AuthContext.tsx'; // Import useAuth
-import { LeaderboardSkeleton } from '../components/Skeletons.tsx'; // Import skeleton
+import { User } from '../data/mockData'; // User interface now includes 'rating'
+import { useAuth } from '../contexts/AuthContext';
+import { LeaderboardSkeleton } from '../components/Skeletons';
 
-const PAGE_SIZE = 10; // Set page size to 10
+const PAGE_SIZE = 10;
+const RATING_SCALING_FACTOR = 100;
+
+// --- RATING FUNCTION ---
+const calculateRating = (accuracy: number | undefined, correct: number | undefined): number => {
+    const safeAccuracy = accuracy ?? 0;
+    const safeCorrect = correct ?? 0;
+    // Rating = (Accuracy / 100) * log10(CorrectlySolved + 1) * ScalingFactor
+    const rating = Math.max(0, (safeAccuracy / 100) * Math.log10(safeCorrect + 1) * RATING_SCALING_FACTOR);
+    return parseFloat(rating.toFixed(2));
+};
 
 // --- PODIUM CARD COMPONENT ---
 const PodiumCard = ({ user, rank }: { user: User; rank: number }) => {
@@ -26,19 +37,19 @@ const PodiumCard = ({ user, rank }: { user: User; rank: number }) => {
           src={user.avatar || '/user.png'}
           alt={user.name}
           className={`w-20 h-20 rounded-full object-cover mb-3 ring-4 ${rankStyles.ring}`}
-          onError={(e) => { e.currentTarget.src = '/user.png'; }} // Fallback image
+          onError={(e) => { e.currentTarget.src = '/user.png'; }}
         />
         <Link to={`/profile/${user.username}`} className="font-bold text-slate-800 dark:text-white text-base hover:underline truncate w-full">{user.name}</Link>
         <p className="text-xs text-slate-500 dark:text-slate-400 truncate w-full">@{user.username}</p>
         <div className={`mt-3 w-full bg-gradient-to-r ${rankStyles.gradient} p-2 rounded-lg`}>
           <div className="flex justify-around items-center text-white">
             <div className="text-center">
-              <p className="font-bold text-lg">{user.stats?.correct ?? 0}</p> {/* Nullish coalescing for safety */}
-              <p className="text-xs opacity-80">Solved</p>
+              <p className="font-bold text-lg">{user.rating ?? 0}</p>
+              <p className="text-xs opacity-80">Rating</p>
             </div>
-            <div className="text-center">
-              <p className="font-bold text-lg">{(user.stats?.accuracy ?? 0).toFixed(1)}%</p> {/* Nullish coalescing for safety */}
-              <p className="text-xs opacity-80">Accuracy</p>
+             <div className="text-center">
+              <p className="font-bold text-lg">{user.stats?.correct ?? 0}</p>
+              <p className="text-xs opacity-80">Solved</p>
             </div>
           </div>
         </div>
@@ -47,58 +58,115 @@ const PodiumCard = ({ user, rank }: { user: User; rank: number }) => {
   );
 };
 
+// --- Rating Explanation Modal Component ---
+const RatingInfoModal = ({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) => {
+    if (!isOpen) return null;
+
+    return (
+        <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+            onClick={onClose} // Close modal when clicking backdrop
+        >
+            <div
+                className="bg-white dark:bg-slate-800 rounded-lg shadow-xl p-6 max-w-md w-full relative transform transition-all duration-300 scale-100 opacity-100"
+                onClick={(e) => e.stopPropagation()} // Prevent closing when clicking inside modal
+            >
+                {/* Close Button */}
+                <button
+                    onClick={onClose}
+                    className="absolute top-3 right-3 p-1 rounded-full text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                    aria-label="Close rating explanation"
+                >
+                    <X className="w-5 h-5" />
+                </button>
+
+                {/* Modal Title */}
+                <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-3 flex items-center gap-2">
+                    <Info className="w-5 h-5 text-blue-500" />
+                    How Rating Works
+                </h3>
+
+                {/* Explanation */}
+                <div className="space-y-3 text-sm text-slate-600 dark:text-slate-300">
+                    <p>
+                        The rating aims to provide a balanced measure of your performance on GATECode, considering both accuracy and the number of questions you solve correctly.
+                    </p>
+                    <p>It is calculated using the following formula:</p>
+                    <div className="bg-slate-100 dark:bg-slate-700 p-3 rounded text-center my-2">
+                        <code className="text-sm font-mono text-slate-800 dark:text-slate-200 block whitespace-normal">
+                           Rating = (Accuracy / 100) * log<sub>10</sub>(Correct + 1) * {RATING_SCALING_FACTOR}
+                        </code>
+                    </div>
+                    <ul className="list-disc list-inside space-y-1 pl-1">
+                        <li><strong className="dark:text-white">Accuracy / 100:</strong> Your overall percentage of correct answers, normalized to a value between 0 and 1.</li>
+                        <li><strong className="dark:text-white">log<sub>10</sub>(Correct + 1):</strong> This part rewards solving more questions. Using a logarithm (base 10) means solving your first few questions correctly gives a bigger boost than solving more questions when you've already solved many. This prevents simply grinding easy questions from inflating the rating too quickly. We add 1 to avoid `log(0)`.</li>
+                        <li><strong className="dark:text-white">{RATING_SCALING_FACTOR}:</strong> This simply scales the result to make the rating number easier to read (e.g., 150 instead of 1.5).</li>
+                    </ul>
+                     <p className="text-xs pt-2 text-slate-500 dark:text-slate-400">
+                        Note: This rating primarily reflects performance on this platform and doesn't currently factor in individual question difficulty.
+                    </p>
+                     <p>
+                        <strong className="dark:text-white">Rating Range:</strong> The lowest possible rating is 0. There's no theoretical upper limit, but the logarithmic factor means the rating increases more slowly as you solve a very high number of questions.
+                    </p>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+
 // --- MAIN LEADERBOARD COMPONENT ---
 export function Leaderboard() {
-  const { loading: authLoading } = useAuth(); // Get auth loading state
-  const [sortBy, setSortBy] = useState<'accuracy' | 'solved'>('accuracy');
+  const { loading: authLoading } = useAuth();
   const [leaderboard, setLeaderboard] = useState<User[]>([]);
-  const [loadingData, setLoadingData] = useState(true); // Renamed loading state
+  const [loadingData, setLoadingData] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [isInfoModalOpen, setIsInfoModalOpen] = useState(false); // State for modal
 
-  // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
   const [firstVisible, setFirstVisible] = useState<DocumentSnapshot | null>(null);
   const [lastVisible, setLastVisible] = useState<DocumentSnapshot | null>(null);
   const [totalUsers, setTotalUsers] = useState(0);
 
-  // Fetch Leaderboard Data with Pagination
+  // Fetch Leaderboard Data with Pagination and Rating Calculation
   const fetchLeaderboard = useCallback(async (page: number, direction: 'next' | 'prev' | 'first' = 'first') => {
-    if (direction === 'first') setLoadingData(true); // Use data loading state
+    // Start loading indicators
+    if (direction === 'first') setLoadingData(true);
     else setLoadingMore(true);
 
     try {
       const usersCollection = collection(db, 'users');
 
-      // Only fetch total count on the first load or when sorting changes
+      // Fetch total count only on first load
       if (direction === 'first') {
-          const countSnapshot = await getCountFromServer(query(usersCollection)); // Count all users
+          const countSnapshot = await getCountFromServer(query(usersCollection));
           setTotalUsers(countSnapshot.data().count);
       }
 
-      // Base query
+      // Base query - primarily ordered by 'correct' for efficient fetching of top candidates
       let q = query(usersCollection);
+      q = query(q, orderBy('stats.correct', 'desc'), orderBy('stats.accuracy', 'desc')); // Keep secondary sort
 
-      // Apply sorting
-      if (sortBy === 'accuracy') {
-        q = query(q, orderBy('stats.accuracy', 'desc'), orderBy('stats.correct', 'desc'));
-      } else { // sortBy === 'solved'
-        q = query(q, orderBy('stats.correct', 'desc'), orderBy('stats.accuracy', 'desc'));
-      }
-
-      // Apply pagination logic
+      // Apply pagination logic based on cursors
       if (direction === 'next' && lastVisible) {
         q = query(q, startAfter(lastVisible), limit(PAGE_SIZE));
       } else if (direction === 'prev' && firstVisible) {
+         // Firestore doesn't directly support endBefore with startAfter logic easily.
+         // Fetching requires knowing the document *before* the firstVisible based on the order.
+         // For simplicity with client-side sorting, we re-fetch from the start up to the current page if going back.
+         // A more complex server-side solution or different data structure would be needed for perfect backward pagination with this client-side sort.
+         // Let's stick to simple forward/first pagination for now or refetch up to the previous page end.
+         // Simpler: Fetch the page before the current firstVisible
          q = query(q, endBefore(firstVisible), limitToLast(PAGE_SIZE));
       } else { // 'first' or initial load
         q = query(q, limit(PAGE_SIZE));
       }
 
       const usersSnapshot = await getDocs(q);
-       // Add null checks for stats when mapping
+      // Map Firestore data and ensure stats exist
       const usersData = usersSnapshot.docs.map(doc => {
           const data = doc.data() as User;
-          // Ensure stats object and its properties exist
+          // Ensure stats object and its properties exist, default to 0
           if (!data.stats) {
               data.stats = { attempted: 0, correct: 0, accuracy: 0 };
           } else {
@@ -109,50 +177,69 @@ export function Leaderboard() {
           return data;
       });
 
+      console.log(`Firestore Leaderboard: Fetched ${usersSnapshot.docs.length} users pre-sort.`);
 
-      console.log(`Firestore Leaderboard: Fetched ${usersSnapshot.docs.length} documents.`);
+      // Calculate rating for each fetched user
+      const usersWithRating = usersData.map(user => ({
+          ...user,
+          rating: calculateRating(user.stats?.accuracy, user.stats?.correct) // Assign calculated rating
+      }));
 
-      setLeaderboard(direction === 'prev' ? usersData.reverse() : usersData);
+      // Re-sort client-side based on the calculated rating
+      usersWithRating.sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0));
+      console.log(`Client-side: Re-sorted ${usersWithRating.length} users by calculated rating.`);
 
-      // Update cursors
+      // Set the client-side sorted list
+      // Handle reversing for 'prev' direction after client-side sort
+       setLeaderboard(direction === 'prev' ? usersWithRating.reverse() : usersWithRating);
+
+
+      // Update Firestore cursors (still based on the Firestore query order)
       if (usersSnapshot.docs.length > 0) {
-        setFirstVisible(usersSnapshot.docs[0]);
-        setLastVisible(usersSnapshot.docs[usersSnapshot.docs.length - 1]);
-      } else if (direction !== 'prev') {
+        // Correctly get first/last doc based on potential reversal needed by pagination logic
+        if (direction === 'prev') {
+             // For limitToLast, the effective first visible is the first doc in the *original* snapshot
+             setFirstVisible(usersSnapshot.docs[0]);
+             // The effective last visible is the last doc in the *original* snapshot
+             setLastVisible(usersSnapshot.docs[usersSnapshot.docs.length - 1]);
+        } else {
+             setFirstVisible(usersSnapshot.docs[0]);
+             setLastVisible(usersSnapshot.docs[usersSnapshot.docs.length - 1]);
+        }
+      } else if (direction !== 'prev') { // Only clear if moving forward/first results in empty
         setFirstVisible(null);
         setLastVisible(null);
       }
+      // If direction is 'prev' and results are empty, keep existing cursors
+
       setCurrentPage(page);
 
     } catch (error) {
       console.error("Error fetching leaderboard data:", error);
-      setLeaderboard([]);
-      setTotalUsers(0);
-      setFirstVisible(null);
-      setLastVisible(null);
+      // Reset state on error
+      setLeaderboard([]); setTotalUsers(0); setFirstVisible(null); setLastVisible(null);
     } finally {
-      setLoadingData(false); // Use data loading state
-      setLoadingMore(false);
+      // Stop loading indicators
+      setLoadingData(false); setLoadingMore(false);
     }
-  }, [sortBy, firstVisible, lastVisible]); // Depend on sortBy and cursors
+  }, [firstVisible, lastVisible]); // Depend on cursors for pagination
 
-  // Initial fetch and refetch when sortBy changes
+  // Initial fetch on component mount
   useEffect(() => {
-    setFirstVisible(null);
-    setLastVisible(null);
+    setFirstVisible(null); setLastVisible(null); // Reset cursors for initial load
     fetchLeaderboard(1, 'first');
    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sortBy]); // Rerun only when sortBy changes
+  }, []); // Run only once
 
+  // Pagination handlers
   const handleNextPage = () => {
-    // Check total users and if lastVisible exists
+    // Check total users and if lastVisible exists before fetching next
     if (!loadingMore && lastVisible && currentPage < totalPages) {
       fetchLeaderboard(currentPage + 1, 'next');
     }
   };
-
   const handlePrevPage = () => {
-     // Check if firstVisible exists
+     // Check if firstVisible exists before fetching previous
     if (!loadingMore && firstVisible && currentPage > 1) {
        fetchLeaderboard(currentPage - 1, 'prev');
     }
@@ -160,10 +247,7 @@ export function Leaderboard() {
 
 
   const totalPages = Math.max(1, Math.ceil(totalUsers / PAGE_SIZE));
-
-  // Extract top 3 *only* if on the first page and data is loaded
   const topThreePodium = !loadingData && currentPage === 1 ? leaderboard.slice(0, 3) : [];
-  // Adjust the rest of the list based on whether the podium is shown
   const listUsers = !loadingData && currentPage === 1 ? leaderboard.slice(topThreePodium.length) : leaderboard;
 
   // Show skeleton if auth is loading OR initial data is loading
@@ -177,13 +261,22 @@ export function Leaderboard() {
       <div className="max-w-4xl mx-auto">
         {/* Header */}
         <div className="text-center mb-6">
-          <div className="inline-flex items-center gap-3 mb-1">
+          <div className="inline-flex items-center justify-center gap-3 mb-1">
             <Trophy className="w-8 h-8 text-yellow-400" />
             <h1 className="text-3xl font-bold text-slate-900 dark:text-white">Leaderboard</h1>
+            {/* Info Button */}
+            <button
+                onClick={() => setIsInfoModalOpen(true)}
+                className="p-1 rounded-full text-blue-500 hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors"
+                aria-label="How rating is calculated"
+            >
+                <Info className="w-5 h-5" />
+            </button>
           </div>
            <p className="text-slate-600 dark:text-slate-400 text-sm">
+             {/* Updated text to mention rating */}
              {totalUsers > 0
-                ? `Showing ${ (currentPage - 1) * PAGE_SIZE + 1 }-${ Math.min(currentPage * PAGE_SIZE, totalUsers) } of ${totalUsers} users`
+                ? `Showing ranks ${ (currentPage - 1) * PAGE_SIZE + 1 }-${ Math.min(currentPage * PAGE_SIZE, totalUsers) } of ${totalUsers} users (ranked by rating)`
                 : 'Top performers in GATE ECE preparation'
              }
            </p>
@@ -199,72 +292,48 @@ export function Leaderboard() {
         )}
         {/* --- END PODIUM SECTION --- */}
 
-        {/* Sort Controls */}
-        <div className="flex justify-center mb-4">
-          <div className="glass-card p-1 rounded-full flex items-center gap-2">
-            <button
-              onClick={() => { if (sortBy !== 'accuracy') setSortBy('accuracy'); }} // Prevent refetch if already sorted
-              disabled={loadingMore}
-              className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-                sortBy === 'accuracy'
-                  ? 'bg-blue-600 text-white shadow-sm' // Added shadow
-                  : 'text-slate-700 dark:text-slate-300 hover:bg-slate-200/50 dark:hover:bg-slate-800/50'
-              } disabled:opacity-50`}
-            >
-              Sort by Accuracy
-            </button>
-            <button
-              onClick={() => { if (sortBy !== 'solved') setSortBy('solved'); }} // Prevent refetch if already sorted
-              disabled={loadingMore}
-              className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-                sortBy === 'solved'
-                  ? 'bg-blue-600 text-white shadow-sm' // Added shadow
-                  : 'text-slate-700 dark:text-slate-300 hover:bg-slate-200/50 dark:hover:bg-slate-800/50'
-              } disabled:opacity-50`}
-            >
-              Sort by Questions Solved
-            </button>
-          </div>
-        </div>
+        {/* --- Removed Sort Controls --- */}
 
         {/* Leaderboard List Container */}
-        <div className="glass-card overflow-hidden relative">
+        <div className="glass-card overflow-hidden relative mt-4"> {/* Added mt-4 since sort controls removed */}
            {/* Loading overlay for pagination */}
            {loadingMore && <div className="absolute inset-0 bg-white/50 dark:bg-black/50 flex items-center justify-center z-10"><div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div></div>}
           <div>
             {listUsers.map((user, index) => {
-              // Calculate rank based on current page and index
+              // Calculate rank based on current page and index within the list portion
               const rankOffset = currentPage === 1 ? topThreePodium.length : 0;
               const rank = (currentPage - 1) * PAGE_SIZE + rankOffset + index + 1;
 
               return (
                 <div key={user.uid} className={`flex items-center px-4 py-3 border-b border-slate-200 dark:border-slate-800 last:border-b-0 hover:bg-slate-100/50 dark:hover:bg-slate-800/50 transition-colors`}>
-                   {/* Rank */}
-                  <div className="w-10 text-center font-bold text-slate-500 dark:text-slate-400">
-                    {rank}
+                  {/* Rank */}
+                  <div className="w-12 text-center font-bold text-slate-500 dark:text-slate-400 text-sm"> {/* Wider rank column */}
+                      {rank}
                   </div>
                   {/* User Info */}
                   <div className="flex-1 flex items-center gap-3 overflow-hidden">
                     <img
                       src={user.avatar || '/user.png'}
                       alt={user.name}
-                      className="w-9 h-9 rounded-full object-cover flex-shrink-0 border dark:border-slate-700" // Added border
-                      onError={(e) => { e.currentTarget.src = '/user.png'; }} // Fallback
+                      className="w-9 h-9 rounded-full object-cover flex-shrink-0 border dark:border-slate-700"
+                      onError={(e) => { e.currentTarget.src = '/user.png'; }}
                     />
                     <div className="overflow-hidden">
                       <Link to={`/profile/${user.username}`} className="font-medium text-slate-800 dark:text-white hover:underline truncate text-sm block">{user.name}</Link>
                       <p className="text-xs text-slate-500 dark:text-slate-400 truncate">@{user.username}</p>
                     </div>
                   </div>
-                  {/* Stats */}
+                  {/* Stats: Rating and Accuracy */}
                   <div className="flex items-center justify-end gap-3 sm:gap-4 md:gap-6 text-right flex-shrink-0 pl-2">
-                    <div className="flex items-center justify-end gap-1 sm:gap-1.5 text-emerald-600 dark:text-emerald-400 text-xs sm:text-sm min-w-[60px] sm:min-w-[70px]">
-                      <Target className="w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0" />
-                      <span className="font-semibold">{(user.stats?.accuracy ?? 0).toFixed(1)}%</span> {/* Nullish coalescing */}
+                     {/* Rating */}
+                     <div className="flex items-center justify-end gap-1 sm:gap-1.5 text-blue-600 dark:text-blue-400 text-xs sm:text-sm min-w-[60px] sm:min-w-[70px]" title="Performance Rating">
+                      <BarChart className="w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0" />
+                      <span className="font-semibold">{user.rating ?? 0}</span> {/* Display rating */}
                     </div>
-                     <div className="flex items-center justify-end gap-1 sm:gap-1.5 text-blue-600 dark:text-blue-400 text-xs sm:text-sm min-w-[50px] sm:min-w-[60px]">
-                      <Award className="w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0" />
-                      <span className="font-semibold">{user.stats?.correct ?? 0}</span> {/* Nullish coalescing */}
+                     {/* Accuracy */}
+                     <div className="flex items-center justify-end gap-1 sm:gap-1.5 text-emerald-600 dark:text-emerald-400 text-xs sm:text-sm min-w-[50px] sm:min-w-[60px]" title="Accuracy">
+                      <Target className="w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0" />
+                      <span className="font-semibold">{(user.stats?.accuracy ?? 0).toFixed(1)}%</span>
                     </div>
                   </div>
                 </div>
@@ -283,26 +352,33 @@ export function Leaderboard() {
                 <button
                 onClick={handlePrevPage}
                 disabled={currentPage === 1 || loadingMore}
-                className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="pagination-button" /* Use class defined in style tag */
                 >
-                <ChevronLeft className="w-4 h-4" />
-                Previous
+                <ChevronLeft className="w-4 h-4" /> Previous
                 </button>
                 <span className="text-sm text-gray-700 dark:text-gray-400 order-first sm:order-none">
                     Page {currentPage} of {totalPages}
                 </span>
                 <button
                 onClick={handleNextPage}
-                disabled={currentPage === totalPages || loadingMore || leaderboard.length < PAGE_SIZE || !lastVisible /* Disable if no next cursor */}
-                className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={currentPage === totalPages || loadingMore || leaderboard.length < PAGE_SIZE || !lastVisible}
+                className="pagination-button" /* Use class defined in style tag */
                 >
-                Next
-                <ChevronRight className="w-4 h-4" />
+                Next <ChevronRight className="w-4 h-4" />
                 </button>
             </div>
         )}
-
       </div>
+
+       {/* Rating Info Modal */}
+      <RatingInfoModal isOpen={isInfoModalOpen} onClose={() => setIsInfoModalOpen(false)} />
+
+      {/* Reusable pagination button style */}
+       <style>{`
+            .pagination-button {
+                @apply w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed;
+            }
+       `}</style>
     </div>
   );
 }
