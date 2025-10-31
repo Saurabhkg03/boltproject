@@ -54,7 +54,17 @@ export interface Submission {
 }
 
 export interface UserQuestionData {
-    isMarkedAsDoubt?: boolean;
+    isFavorite?: boolean; // Renamed from isMarkedAsDoubt
     note?: string;
+    savedListIds?: string[]; // NEW: To track which lists this question is in
 }
 
+// NEW: Interface for user-created question lists
+export interface QuestionList {
+    id: string; // Firestore document ID
+    uid: string; // Owner's UID
+    name: string;
+    questionIds: string[]; // Array of question IDs
+    createdAt: string;
+    isPrivate?: boolean; // For future use (like the lock icon)
+}

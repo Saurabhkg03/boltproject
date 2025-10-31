@@ -1,7 +1,8 @@
 // src/firebase.ts
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
+// MODIFIED: Added arrayUnion, arrayRemove, writeBatch, documentId
+import { getFirestore, arrayUnion, arrayRemove, writeBatch, documentId } from 'firebase/firestore';
 
 // Get the Firebase configuration from environment variables
 // Vite exposes env variables on the `import.meta.env` object
