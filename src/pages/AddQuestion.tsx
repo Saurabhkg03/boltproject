@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import { PlusCircle, Loader2, ArrowLeft } from 'lucide-react';
-import { useAuth } from '../contexts/AuthContext';
-import { db } from '../firebase';
+import { useAuth } from '../contexts/AuthContext.tsx';
+import { db } from '../firebase.ts';
 import { collection, addDoc, doc, getDoc, setDoc } from 'firebase/firestore';
-import { Question } from '../data/mockData';
+import { Question } from '../data/mockData.ts';
 
 export function AddQuestion() {
   const { userInfo } = useAuth();
@@ -51,6 +51,10 @@ export function AddQuestion() {
                         { label: 'D', text_html: '', is_correct: false },
                     ];
                 }
+                // Ensure at least one option is correct for MCQ on load if none are
+                if (questionData.question_type === 'mcq' && !questionData.options.some((o: { is_correct: boolean }) => o.is_correct)) {
+                    questionData.options[0].is_correct = true;
+                }
                 setFormData(questionData);
             } else {
                 setError("Question not found");
@@ -67,14 +71,41 @@ export function AddQuestion() {
     setFormData({ ...formData, options: newOptions });
   };
 
+  // MODIFIED: Handler for MCQ (radio button)
   const handleCorrectOptionChange = (index: number) => {
-    const newOptions = (formData.options || []).map((opt, i) => ({
+    const newOptions = (formData.options || []).map((opt: { label: string, text_html: string, is_correct: boolean }, i: number) => ({
       ...opt,
       is_correct: i === index,
     }));
     setFormData({ ...formData, options: newOptions });
   };
+
+  // MODIFIED: Handler for MSQ (checkbox)
+  const handleCorrectOptionToggle = (index: number) => {
+    const newOptions = (formData.options || []).map((opt: { label: string, text_html: string, is_correct: boolean }, i: number) => ({
+      ...opt,
+      is_correct: i === index ? !opt.is_correct : opt.is_correct,
+    }));
+    setFormData({ ...formData, options: newOptions });
+  };
   
+  // MODIFIED: Handle question type change
+  const handleTypeChange = (type: 'mcq' | 'nat' | 'msq') => {
+      const newOptions = (formData.options || []).map((opt: { label: string, text_html: string, is_correct: boolean }, i: number) => ({
+          ...opt,
+          // When switching to MCQ, default to A being correct if nothing else is
+          is_correct: type === 'mcq' ? i === 0 : false
+      }));
+      setFormData({
+          ...formData,
+          question_type: type,
+          options: newOptions,
+          nat_answer: type === 'nat' ? formData.nat_answer : '', // Clear NAT answer if not NAT
+          correctAnswerLabel: type === 'mcq' ? newOptions.find((o: { is_correct: boolean }) => o.is_correct)?.label : null,
+          correctAnswerLabels: type === 'msq' ? [] : []
+      });
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!userInfo || (userInfo.role !== 'moderator' && userInfo.role !== 'admin')) {
@@ -85,12 +116,19 @@ export function AddQuestion() {
     setError('');
 
     try {
+        // MODIFIED: Handle saving correct answer labels based on type
         const questionData = {
             ...formData,
             addedBy: userInfo.uid,
             createdAt: new Date().toISOString(),
             verified: userInfo.role === 'admin' ? true : false, // Admins can auto-verify
-            correctAnswerLabel: formData.options?.find(opt => opt.is_correct)?.label || ''
+            // Handle single vs multiple correct labels
+            correctAnswerLabel: formData.question_type === 'mcq'
+                ? formData.options?.find((opt: { is_correct: boolean }) => opt.is_correct)?.label || 'A' // Default to A if none selected
+                : null, // Clear single label for MSQ/NAT
+            correctAnswerLabels: formData.question_type === 'msq'
+                ? formData.options?.filter((opt: { is_correct: boolean }) => opt.is_correct).map((opt: { label: string }) => opt.label) || []
+                : [], // Clear array for MCQ/NAT
         };
 
         if (isEditMode && id) {
@@ -149,10 +187,24 @@ export function AddQuestion() {
           {/* Options for MCQ */}
           {formData.question_type === 'mcq' && (
             <div className="space-y-4">
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Options</label>
-                {(formData.options || []).map((opt, index) => (
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Options (Select one correct answer)</label>
+                {(formData.options || []).map((opt: { label: string, text_html: string, is_correct: boolean }, index: number) => (
                     <div key={index} className="flex items-center gap-4">
                         <input type="radio" name="correct_option" checked={opt.is_correct} onChange={() => handleCorrectOptionChange(index)} className="focus:ring-indigo-500 h-4 w-4 text-indigo-600 border-gray-300"/>
+                        <span className="font-semibold">{opt.label}</span>
+                        <input type="text" placeholder={`Option ${opt.label} HTML`} value={opt.text_html} onChange={e => handleOptionChange(index, e.target.value)} className="flex-1 block w-full rounded-md border-gray-300 shadow-sm dark:bg-gray-800 dark:border-gray-700 focus:border-indigo-500 focus:ring-indigo-500"/>
+                    </div>
+                ))}
+            </div>
+          )}
+
+          {/* MODIFIED: Options for MSQ */}
+          {formData.question_type === 'msq' && (
+            <div className="space-y-4">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Options (Mark all that are correct)</label>
+                {(formData.options || []).map((opt: { label: string, text_html: string, is_correct: boolean }, index: number) => (
+                    <div key={index} className="flex items-center gap-4">
+                        <input type="checkbox" name={`correct_option_${index}`} checked={opt.is_correct} onChange={() => handleCorrectOptionToggle(index)} className="focus:ring-indigo-500 h-4 w-4 text-indigo-600 border-gray-300 rounded"/>
                         <span className="font-semibold">{opt.label}</span>
                         <input type="text" placeholder={`Option ${opt.label} HTML`} value={opt.text_html} onChange={e => handleOptionChange(index, e.target.value)} className="flex-1 block w-full rounded-md border-gray-300 shadow-sm dark:bg-gray-800 dark:border-gray-700 focus:border-indigo-500 focus:ring-indigo-500"/>
                     </div>
@@ -180,7 +232,12 @@ export function AddQuestion() {
             </div>
             <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Question Type</label>
-                <select value={formData.question_type} onChange={e => setFormData({...formData, question_type: e.target.value as 'mcq' | 'nat' | 'msq'})} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm dark:bg-gray-800 dark:border-gray-700 focus:border-indigo-500 focus:ring-indigo-500">
+                {/* MODIFIED: Added onChange handler */}
+                <select 
+                    value={formData.question_type} 
+                    onChange={e => handleTypeChange(e.target.value as 'mcq' | 'nat' | 'msq')} 
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm dark:bg-gray-800 dark:border-gray-700 focus:border-indigo-500 focus:ring-indigo-500"
+                >
                     <option value="mcq">MCQ</option>
                     <option value="nat">NAT</option>
                     <option value="msq">MSQ</option>
@@ -206,3 +263,6 @@ export function AddQuestion() {
     </div>
   );
 }
+
+
+

@@ -12,7 +12,10 @@ export interface Question {
     text_html: string;
     is_correct: boolean;
   }[];
-  correctAnswerLabel: string;
+  // MODIFIED: Made single label optional
+  correctAnswerLabel?: string | null;
+  // MODIFIED: Added array for MSQ
+  correctAnswerLabels?: string[];
   difficulty: 'Easy' | 'Medium' | 'Hard';
   year: string;
   source?: string;
@@ -48,7 +51,8 @@ export interface Submission {
   uid: string;
   correct: boolean;
   timestamp: string;
-  selectedOption: string;
+  // MODIFIED: Changed to array for MSQ support
+  selectedOptions: string[];
   natAnswer?: string;
   timeTaken?: number;
 }

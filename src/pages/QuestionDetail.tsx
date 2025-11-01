@@ -1,16 +1,16 @@
 import { useState, useEffect, useRef, useMemo } from 'react'; // MODIFIED: Added useMemo
 import { useParams, useNavigate, Link } from 'react-router-dom';
-// MODIFIED: Removed Trash2, added FolderPlus, ListPlus, CheckIcon, and RotateCcw
+// MODIFIED: Added FolderPlus, ListPlus, CheckIcon, and RotateCcw
 import { ArrowLeft, ArrowRight, CheckCircle, XCircle, Loader2, BookOpen, Bookmark, Calendar, RefreshCcw, Save, AlertTriangle, Timer as TimerIcon, Play, Pause, LogIn, Check as CheckIcon, Plus, Folder, X as XIcon, FolderPlus, ListPlus, RotateCcw } from 'lucide-react';
 
 // MODIFIED: Added query, where, orderBy, serverTimestamp, writeBatch
 import { doc, getDoc, setDoc, collection, getDocs, updateDoc, deleteDoc, arrayUnion, arrayRemove, onSnapshot, query, where, serverTimestamp, writeBatch, orderBy, addDoc } from 'firebase/firestore'; // MODIFIED: Added addDoc
-// MODIFIED: Corrected import path, added .ts extension
-import { db } from '../firebase.ts';
-// MODIFIED: Corrected import path, added .tsx extension
-import { useAuth } from '../contexts/AuthContext.tsx';
-// MODIFIED: Corrected import path and added QuestionList, added .ts extension
-import { Question, Submission, UserQuestionData, QuestionList } from '../data/mockData.ts';
+// MODIFIED: Corrected import path, removed .ts extension
+import { db } from '../firebase';
+// MODIFIED: Corrected import path, removed .tsx extension
+import { useAuth } from '../contexts/AuthContext';
+// MODIFIED: Corrected import path and added QuestionList, removed .ts extension
+import { Question, Submission, UserQuestionData, QuestionList } from '../data/mockData';
 
 // Declare KaTeX auto-render function from the global scope
 declare global {
@@ -20,12 +20,14 @@ declare global {
 }
 
 // ... (interfaces Question, Submission, UserQuestionData remain the same) ...
-// MODIFIED: Removed extra closing brace
+// MODIFIED: Removed extra closing brace (was already correct in file)
+/*
 interface UserQuestionData {
     isFavorite?: boolean; // Renamed from isMarkedAsDoubt
     note?: string;
     savedListIds?: string[]; // NEW: Array of list IDs
 }
+*/
 
 // --- UTILITY FUNCTIONS ---
 const extractAndCleanHtml = (html: string, contentClass?: string): string => {
@@ -284,7 +286,8 @@ export function QuestionDetail() {
   const [userQuestionData, setUserQuestionData] = useState<UserQuestionData | null>(null);
   const [isListModalOpen, setIsListModalOpen] = useState(false);
 
-  const [selectedOption, setSelectedOption] = useState<string | null>(null);
+  // MODIFIED: State for selected options (array for MSQ)
+  const [selectedOptions, setSelectedOptions] = useState<string[]>([]);
   const [natAnswer, setNatAnswer] = useState('');
   const [submitted, setSubmitted] = useState(false);
   const [isCorrect, setIsCorrect] = useState(false);
@@ -317,7 +320,8 @@ export function QuestionDetail() {
       if(timerRef.current) clearInterval(timerRef.current);
       setLoadingData(true);
       setSubmitted(false);
-      setSelectedOption(null);
+      // MODIFIED: Reset array
+      setSelectedOptions([]);
       setNatAnswer('');
       setIsFavorite(false); // MODIFIED
       setNote('');
@@ -344,7 +348,8 @@ export function QuestionDetail() {
               const sub = submissionSnap.data() as Submission;
               setSubmitted(true);
               setIsCorrect(sub.correct);
-              setSelectedOption(sub.selectedOption || null);
+              // MODIFIED: Set array from submission
+              setSelectedOptions(sub.selectedOptions || []);
               setNatAnswer(sub.natAnswer || '');
               setTimeElapsed(sub.timeTaken || 0);
             }
@@ -450,17 +455,45 @@ export function QuestionDetail() {
      };
   }, [question, loadingData, submitted]);
 
+  // MODIFIED: Handler for MCQ selection
+  const handleMcqSelect = (label: string) => {
+    if (submitted || !isAuthenticated) return;
+    setSelectedOptions([label]);
+  };
+
+  // MODIFIED: Handler for MSQ selection
+  const handleMsqToggle = (label: string) => {
+    if (submitted || !isAuthenticated) return;
+    setSelectedOptions(prev =>
+      prev.includes(label)
+        ? prev.filter(l => l !== label)
+        : [...prev, label]
+    );
+  };
+
+
   const handleSubmit = async () => {
     if (!user || !question || !userInfo || submitted) return;
     setIsTimerOn(false);
     let userCorrect = false;
+
+    // MODIFIED: Updated submission logic for all types
     if (question.question_type === 'nat') {
+      // NAT Logic
       userCorrect = natAnswer.trim() === question.nat_answer;
+    } else if (question.question_type === 'msq') {
+      // MSQ Logic: No partial credit
+      const correctLabels = new Set(question.options.filter(o => o.is_correct).map(o => o.label));
+      const selectedLabels = new Set(selectedOptions);
+      userCorrect = correctLabels.size === selectedLabels.size &&
+                    [...correctLabels].every(label => selectedLabels.has(label));
     } else {
-      if (!selectedOption) return;
+      // MCQ Logic
+      if (!selectedOptions[0]) return; // Nothing selected for MCQ
       const correctOption = question.options.find(opt => opt.is_correct);
-      userCorrect = selectedOption === correctOption?.label;
+      userCorrect = selectedOptions[0] === correctOption?.label;
     }
+    
     setIsCorrect(userCorrect);
     setSubmitted(true);
     const submissionData: Partial<Submission> = {
@@ -468,7 +501,8 @@ export function QuestionDetail() {
       uid: user.uid,
       correct: userCorrect,
       timestamp: new Date().toISOString(),
-      selectedOption: selectedOption || '',
+      // MODIFIED: Save the array
+      selectedOptions: selectedOptions, 
       natAnswer: natAnswer,
     };
     if (timeElapsed > 0) {
@@ -512,7 +546,8 @@ export function QuestionDetail() {
         await deleteDoc(submissionDocRef);
         setUserInfo(prev => prev ? { ...prev, stats: newStats } : null);
         setSubmitted(false);
-        setSelectedOption(null);
+        // MODIFIED: Reset array
+        setSelectedOptions([]);
         setNatAnswer('');
         setIsCorrect(false);
         setTimeElapsed(0);
@@ -746,26 +781,26 @@ export function QuestionDetail() {
                 )}
               </div>
 
+              {/* --- MODIFIED: Options Rendering Logic --- */}
               {question.question_type === 'nat' ? (
+                // NAT Input
                 <div className="mb-8">
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Your Answer</label>
                   <input type="text" value={natAnswer} onChange={(e) => setNatAnswer(e.target.value)} disabled={submitted || !isAuthenticated} className="w-full max-w-xs px-4 py-3 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-white disabled:bg-gray-100 dark:disabled:bg-gray-800 disabled:cursor-not-allowed" placeholder="Enter numerical answer" />
                 </div>
-              ) : (
+              ) : question.question_type === 'msq' ? (
+                // MSQ Checkboxes
                 <div className="space-y-3 mb-8">
                   {question.options.map((option, index) => {
-                    const isSelected = selectedOption === option.label;
+                    const isSelected = selectedOptions.includes(option.label);
                     const isCorrectOption = option.is_correct;
                     const cleanedOptionHtml = extractAndCleanHtml(option.text_html, 'option_data');
                     let optionClasses = 'w-full p-4 rounded-lg border-2 text-left transition-all flex items-start gap-3 ';
                     let stateIndicator: React.ReactNode = null;
                     if (!submitted) {
                       optionClasses += isSelected ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30 ring-2 ring-blue-300 dark:ring-blue-700' : 'border-gray-200 dark:border-gray-700';
-                      if (isAuthenticated) {
-                          optionClasses += ' hover:border-blue-400 dark:hover:border-blue-600 cursor-pointer';
-                      } else {
-                          optionClasses += ' cursor-default opacity-75';
-                      }
+                      if (isAuthenticated) optionClasses += ' hover:border-blue-400 dark:hover:border-blue-600 cursor-pointer';
+                      else optionClasses += ' cursor-default opacity-75';
                     } else {
                        optionClasses += ' cursor-default ';
                       if (isCorrectOption) {
@@ -779,7 +814,44 @@ export function QuestionDetail() {
                       }
                     }
                     return (
-                      <button key={option.label} ref={el => optionsRef.current[index] = el} onClick={() => isAuthenticated && !submitted && setSelectedOption(option.label)} disabled={submitted || !isAuthenticated} className={optionClasses} title={!isAuthenticated ? "Login to select an option" : ""}>
+                      <button key={option.label} ref={el => optionsRef.current[index] = el} onClick={() => handleMsqToggle(option.label)} disabled={submitted || !isAuthenticated} className={optionClasses} title={!isAuthenticated ? "Login to select an option" : ""}>
+                          <span className={`flex-shrink-0 w-7 h-7 rounded-md border-2 flex items-center justify-center font-semibold text-sm mt-0.5 ${ isSelected && !submitted ? 'bg-blue-500 border-blue-500 text-white' : submitted && isCorrectOption ? 'bg-green-500 border-green-500 text-white' : submitted && isSelected && !isCorrectOption ? 'bg-red-500 border-red-500 text-white' : 'bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300' }`}>
+                            {/* Show checkmark if selected, otherwise label */}
+                            {isSelected ? <CheckIcon className="w-4 h-4" /> : option.label}
+                          </span>
+                          <span className="flex-1 text-gray-900 dark:text-white prose dark:prose-invert prose-sm" dangerouslySetInnerHTML={{ __html: cleanedOptionHtml }} />
+                          {stateIndicator}
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                // MCQ Radio Buttons
+                <div className="space-y-3 mb-8">
+                  {question.options.map((option, index) => {
+                    const isSelected = selectedOptions[0] === option.label;
+                    const isCorrectOption = option.is_correct;
+                    const cleanedOptionHtml = extractAndCleanHtml(option.text_html, 'option_data');
+                    let optionClasses = 'w-full p-4 rounded-lg border-2 text-left transition-all flex items-start gap-3 ';
+                    let stateIndicator: React.ReactNode = null;
+                    if (!submitted) {
+                      optionClasses += isSelected ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30 ring-2 ring-blue-300 dark:ring-blue-700' : 'border-gray-200 dark:border-gray-700';
+                      if (isAuthenticated) optionClasses += ' hover:border-blue-400 dark:hover:border-blue-600 cursor-pointer';
+                      else optionClasses += ' cursor-default opacity-75';
+                    } else {
+                       optionClasses += ' cursor-default ';
+                      if (isCorrectOption) {
+                        optionClasses += 'border-green-500 bg-green-50 dark:bg-green-900/30';
+                        stateIndicator = <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0 mt-1" />;
+                      } else if (isSelected && !isCorrectOption) {
+                        optionClasses += 'border-red-500 bg-red-50 dark:bg-red-900/30';
+                         stateIndicator = <XCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-1" />;
+                      } else {
+                        optionClasses += 'border-gray-200 dark:border-gray-700 opacity-60';
+                      }
+                    }
+                    return (
+                      <button key={option.label} ref={el => optionsRef.current[index] = el} onClick={() => handleMcqSelect(option.label)} disabled={submitted || !isAuthenticated} className={optionClasses} title={!isAuthenticated ? "Login to select an option" : ""}>
                           <span className={`flex-shrink-0 w-7 h-7 rounded-full border-2 flex items-center justify-center font-semibold text-sm mt-0.5 ${ isSelected && !submitted ? 'bg-blue-500 border-blue-500 text-white' : submitted && isCorrectOption ? 'bg-green-500 border-green-500 text-white' : submitted && isSelected && !isCorrectOption ? 'bg-red-500 border-red-500 text-white' : 'bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300' }`}>
                             {option.label}
                           </span>
@@ -790,9 +862,15 @@ export function QuestionDetail() {
                   })}
                 </div>
               )}
+              {/* --- End Options --- */}
+
 
               {isAuthenticated && !submitted && (
-                <button onClick={handleSubmit} disabled={(!selectedOption && question.question_type !== 'nat') || (question.question_type === 'nat' && !natAnswer) || loadingAuth} className="w-full py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 disabled:bg-gray-400 dark:disabled:bg-gray-700 disabled:cursor-not-allowed transition-colors">
+                <button 
+                  onClick={handleSubmit} 
+                  disabled={(!selectedOptions.length && (question.question_type === 'mcq' || question.question_type === 'msq')) || (question.question_type === 'nat' && !natAnswer) || loadingAuth} 
+                  className="w-full py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 disabled:bg-gray-400 dark:disabled:bg-gray-700 disabled:cursor-not-allowed transition-colors"
+                >
                   Submit Answer
                 </button>
               )}
@@ -803,8 +881,10 @@ export function QuestionDetail() {
                       {isCorrect ? <CheckCircle className="w-6 h-6 text-green-600" /> : <XCircle className="w-6 h-6 text-red-600" />}
                       <span className={`font-semibold ${isCorrect ? 'text-green-800 dark:text-green-200' : 'text-red-800 dark:text-red-200'}`}>
                         {isCorrect ? 'Correct!' : 'Incorrect.'}
+                        {/* MODIFIED: Show correct answer label(s) */}
                         {question.question_type === 'nat' && !isCorrect && ` The correct answer is ${question.nat_answer}.`}
-                        {question.question_type !== 'nat' && !isCorrect && ` Correct option was ${question.correctAnswerLabel}.`}
+                        {question.question_type === 'mcq' && !isCorrect && ` Correct option was ${question.options.find(o => o.is_correct)?.label}.`}
+                        {question.question_type === 'msq' && !isCorrect && ` Correct options were ${question.options.filter(o => o.is_correct).map(o => o.label).join(', ')}.`}
                       </span>
                     </div>
                   </div>
@@ -851,5 +931,4 @@ export function QuestionDetail() {
     </>
   );
 }
-
 

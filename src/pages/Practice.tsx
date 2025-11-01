@@ -1,17 +1,17 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-// MODIFIED: Added List, Plus, Lock, Folder, Trash2, X
-import { Search, Filter, CheckCircle, Circle, Edit, ArrowDownUp, ChevronLeft, ChevronRight, AlertTriangle, RotateCcw, List, Plus, Lock, Folder, Trash2, X, Loader2, Bookmark as BookmarkIcon, Check as CheckIcon } from 'lucide-react';
+// MODIFIED: Added List, Plus, Folder, Trash2, X, Bookmark, Check
+import { Search, Filter, CheckCircle, Circle, Edit, ArrowDownUp, ChevronLeft, ChevronRight, AlertTriangle, RotateCcw, List, Plus, Folder, Trash2, X, Loader2, Bookmark as BookmarkIcon, Check as CheckIcon } from 'lucide-react';
 // MODIFIED: Corrected import paths
-import { useAuth } from '../contexts/AuthContext';
-import { db } from '../firebase';
+import { useAuth } from '../contexts/AuthContext.tsx';
+import { db } from '../firebase.ts';
 // MODIFIED: Added documentId, arrayUnion, arrayRemove, writeBatch, addDoc, serverTimestamp, deleteDoc
 import { collection, getDocs, query, where, orderBy, limit, startAfter, getCountFromServer, DocumentSnapshot, endBefore, limitToLast, doc, getDoc, documentId, addDoc, serverTimestamp, deleteDoc, writeBatch, arrayRemove, arrayUnion, onSnapshot } from 'firebase/firestore';
 // MODIFIED: Added QuestionList
-import { Question, Submission, QuestionList, UserQuestionData } from '../data/mockData';
+import { Question, Submission, QuestionList, UserQuestionData } from '../data/mockData.ts';
 // MODIFIED: Corrected import paths
-import { PracticeSkeleton } from '../components/Skeletons';
-import { getCache, setCache } from '../utils/cache';
+import { PracticeSkeleton } from '../components/Skeletons.tsx';
+import { getCache, setCache } from '../utils/cache.ts';
 
 const PAGE_SIZE = 10; // For server-side paginated "All Questions"
 const CLIENT_PAGE_SIZE = 10; // For client-side paginated lists
@@ -28,7 +28,7 @@ const QuestionListsSidebar = ({
     selectedListId,
     onSelectList,
     userId
-} : {
+}: {
     selectedListId: string | null;
     onSelectList: (listId: string | null) => void;
     userId: string | null;
@@ -76,14 +76,14 @@ const QuestionListsSidebar = ({
                 createdAt: new Date().toISOString(), // Use ISO string for client-side sorting consistency
                 isPrivate: false,
             };
-            // Note: serverTimestamp() is better but returns an object, using ISO string here
-            // If using serverTimestamp, adjust object creation and state update
+            
             const docRef = await addDoc(collection(db, `users/${userId}/questionLists`), {
                 ...newList,
                 createdAt: serverTimestamp() // Use serverTimestamp for accurate ordering
             });
+            
             // Optimistic update (or wait for onSnapshot)
-            // setLists(prev => [{ ...newList, id: docRef.id, createdAt: new Date().toISOString() }, ...prev]);
+            setLists(prev => [{ ...newList, id: docRef.id, createdAt: new Date().toISOString() }, ...prev]);
             setNewListName("");
             setShowNewListInput(false);
         } catch (error) {
@@ -117,6 +117,7 @@ const QuestionListsSidebar = ({
                 if(selectedListId === listId) {
                     onSelectList(null);
                 }
+                // onSnapshot will handle the state update
             } catch (error) {
                 console.error("Error deleting list:", error);
             }
@@ -236,6 +237,7 @@ export function Practice() {
   // Filter and Sort State
   const [searchQuery, setSearchQuery] = useState('');
   const [difficultyFilter, setDifficultyFilter] = useState<string>('all');
+  const [questionTypeFilter, setQuestionTypeFilter] = useState<string>('all'); // MODIFIED: Added
   const [topicFilter, setTopicFilter] = useState<string>('all');
   const [subjectFilter, setSubjectFilter] = useState<string>(location.state?.subject || 'all');
   const [yearFilter, setYearFilter] = useState<string>('all');
@@ -300,7 +302,7 @@ export function Practice() {
             if(q.topic) topicSet.add(q.topic);
             if(q.subject) subjectSet.add(q.subject);
             if(q.year) yearSet.add(q.year);
-            if(q.tags) q.tags.forEach(tag => tag && tagSet.add(tag));
+            if(q.tags) q.tags.forEach((tag: string) => tag && tagSet.add(tag));
         });
 
         const newTopics = Array.from(topicSet).sort();
@@ -340,6 +342,7 @@ export function Practice() {
         baseFilters.push(where("verified", "==", true));
       }
       if (difficultyFilter !== 'all') baseFilters.push(where('difficulty', '==', difficultyFilter));
+      if (questionTypeFilter !== 'all') baseFilters.push(where('question_type', '==', questionTypeFilter)); // MODIFIED: Added
       if (subjectFilter !== 'all') baseFilters.push(where('subject', '==', subjectFilter));
       if (topicFilter !== 'all') baseFilters.push(where('topic', '==', topicFilter));
       if (yearFilter !== 'all') baseFilters.push(where('year', '==', yearFilter));
@@ -397,7 +400,7 @@ export function Practice() {
       setLoadingMore(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [difficultyFilter, subjectFilter, topicFilter, yearFilter, tagFilter, sortOrder, userInfo?.role, lastVisible, firstVisible]);
+  }, [difficultyFilter, questionTypeFilter, subjectFilter, topicFilter, yearFilter, tagFilter, sortOrder, userInfo?.role, lastVisible, firstVisible]);
 
   // NEW: Effect to fetch questions when a list is selected
   useEffect(() => {
@@ -499,7 +502,7 @@ export function Practice() {
         fetchPaginatedQuestions(1, 'first');
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [difficultyFilter, subjectFilter, topicFilter, yearFilter, tagFilter, sortOrder, userInfo?.role, loadingFilters]);
+  }, [difficultyFilter, questionTypeFilter, subjectFilter, topicFilter, yearFilter, tagFilter, sortOrder, userInfo?.role, loadingFilters]);
 
    // Fetch user submissions (real-time)
   useEffect(() => {
@@ -522,6 +525,7 @@ export function Practice() {
     if (location.state?.subject && location.state.subject !== subjectFilter) {
       setSelectedListId(null);
       setSubjectFilter(location.state.subject);
+      // Clear location state after applying it
       window.history.replaceState({}, document.title)
     }
   }, [location.state, subjectFilter]);
@@ -556,6 +560,7 @@ export function Practice() {
   const handleResetFilters = () => {
     setSearchQuery('');
     setDifficultyFilter('all');
+    setQuestionTypeFilter('all'); // MODIFIED: Added
     setTopicFilter('all');
     setSubjectFilter('all');
     setYearFilter('all');
@@ -574,6 +579,26 @@ export function Practice() {
   
   const clientFilteredQuestions = useMemo(() => {
       let questionsToFilter = [...listQuestions]; // Clone to avoid mutating state
+      
+      // Client-side filtering
+      if (difficultyFilter !== 'all') {
+          questionsToFilter = questionsToFilter.filter(q => q.difficulty === difficultyFilter);
+      }
+      if (questionTypeFilter !== 'all') { // MODIFIED: Added
+          questionsToFilter = questionsToFilter.filter(q => q.question_type === questionTypeFilter);
+      }
+      if (subjectFilter !== 'all') {
+          questionsToFilter = questionsToFilter.filter(q => q.subject === subjectFilter);
+      }
+      if (topicFilter !== 'all') {
+          questionsToFilter = questionsToFilter.filter(q => q.topic === topicFilter);
+      }
+      if (yearFilter !== 'all') {
+          questionsToFilter = questionsToFilter.filter(q => q.year === yearFilter);
+      }
+      if (tagFilter !== 'all') {
+          questionsToFilter = questionsToFilter.filter(q => q.tags?.includes(tagFilter));
+      }
       
       questionsToFilter.sort((a, b) => {
          switch (sortOrder) {
@@ -597,7 +622,8 @@ export function Practice() {
           q.subject?.toLowerCase().includes(lowerCaseQuery) ||
           q.title?.toLowerCase().includes(lowerCaseQuery)
       );
-  }, [listQuestions, sortOrder, searchQuery]);
+  // MODIFIED: Added all filters to dependency array
+  }, [listQuestions, sortOrder, searchQuery, difficultyFilter, questionTypeFilter, subjectFilter, topicFilter, yearFilter, tagFilter]);
 
   const serverPagedAndFilteredQuestions = useMemo(() => {
     if (!searchQuery) return questions;
@@ -635,6 +661,16 @@ export function Practice() {
       case 'Easy': return 'text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-950/50';
       case 'Medium': return 'text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-950/50';
       case 'Hard': return 'text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/50';
+      default: return 'text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-800/50';
+    }
+  };
+  
+  // MODIFIED: Added
+  const getQuestionTypeColor = (type: string | undefined) => {
+    switch (type) {
+      case 'mcq': return 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/50';
+      case 'msq': return 'text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-950/50';
+      case 'nat': return 'text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/50';
       default: return 'text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-800/50';
     }
   };
@@ -692,11 +728,20 @@ export function Practice() {
                 <div className="flex flex-wrap items-center gap-2 text-sm">
                     <Filter className="w-5 h-5 text-gray-400 flex-shrink-0 hidden sm:inline-block" />
 
+                  {/* MODIFIED: Apply filtersDisabled to all selects */}
                   <select disabled={filtersDisabled} value={difficultyFilter} onChange={(e) => setDifficultyFilter(e.target.value)} className="w-full sm:w-auto px-2 py-1 border border-gray-300 dark:border-gray-700 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-white appearance-none cursor-pointer disabled:opacity-50 disabled:bg-gray-100 dark:disabled:bg-gray-800">
                     <option value="all">Difficulty</option>
                     <option value="Easy">Easy</option>
                     <option value="Medium">Medium</option>
                     <option value="Hard">Hard</option>
+                  </select>
+                  
+                  {/* MODIFIED: Added Question Type Filter */}
+                  <select disabled={filtersDisabled} value={questionTypeFilter} onChange={(e) => setQuestionTypeFilter(e.target.value)} className="w-full sm:w-auto px-2 py-1 border border-gray-300 dark:border-gray-700 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-white appearance-none cursor-pointer disabled:opacity-50 disabled:bg-gray-100 dark:disabled:bg-gray-800">
+                    <option value="all">Type</option>
+                    <option value="mcq">MCQ</option>
+                    <option value="msq">MSQ</option>
+                    <option value="nat">NAT</option>
                   </select>
 
                   <select disabled={filtersDisabled} value={subjectFilter} onChange={(e) => setSubjectFilter(e.target.value)} className="w-full sm:w-auto px-2 py-1 border border-gray-300 dark:border-gray-700 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-white appearance-none cursor-pointer disabled:opacity-50 disabled:bg-gray-100 dark:disabled:bg-gray-800">
@@ -776,6 +821,10 @@ export function Practice() {
                                   <span className={`px-2 py-0.5 rounded-full font-medium ${getDifficultyColor(question.difficulty)}`}>
                                     {question.difficulty || '?'}
                                   </span>
+                                  {/* MODIFIED: Added Question Type */}
+                                  <span className={`px-2 py-0.5 rounded-full font-medium uppercase ${getQuestionTypeColor(question.question_type)}`}>
+                                    {question.question_type || 'N/A'}
+                                  </span>
                                   <span className="px-2 py-0.5 bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-200 rounded font-medium">
                                       {question.subject || 'N/A'}
                                   </span>
@@ -807,6 +856,7 @@ export function Practice() {
                             <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap">Status</th>
                             <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap">Title</th>
                             <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap">Topic</th>
+                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap">Type</th>{/* MODIFIED: Added */}
                             <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap">Difficulty</th>
                             {(userInfo?.role === 'admin' || userInfo?.role === 'moderator') && <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap">Verified</th>}
                             <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap">Details</th>
@@ -821,6 +871,8 @@ export function Practice() {
                                 <td className="px-6 py-4 whitespace-nowrap text-center">{isSolved ? <CheckCircle className="w-5 h-5 text-green-500 inline-block" /> : <Circle className="w-5 h-5 text-gray-300 dark:text-gray-700 inline-block" />}</td>
                                 <td className="px-6 py-4 whitespace-nowrap"><Link to={`/question/${question.id}`} className="text-blue-600 dark:text-blue-400 hover:underline font-medium text-sm">{question.title || `Question ${question.id.substring(0,4)}...`}</Link></td>
                                 <td className="px-6 py-4 whitespace-nowrap"><span className="text-gray-900 dark:text-white text-sm">{question.topic || 'N/A'}</span></td>
+                                {/* MODIFIED: Added Type Column */}
+                                <td className="px-6 py-4 whitespace-nowrap"><span className={`px-3 py-1 rounded-full text-xs font-medium uppercase ${getQuestionTypeColor(question.question_type)}`}>{question.question_type || 'N/A'}</span></td>
                                 <td className="px-6 py-4 whitespace-nowrap"><span className={`px-3 py-1 rounded-full text-xs font-medium ${getDifficultyColor(question.difficulty)}`}>{question.difficulty || '?'}</span></td>
                                 {(userInfo?.role === 'admin' || userInfo?.role === 'moderator') && <td className="px-6 py-4 whitespace-nowrap"><span className={`px-3 py-1 rounded-full text-xs font-medium ${question.verified ? 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-200' : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-200'}`}>{question.verified ? 'Yes' : 'No'}</span></td>}
                                 <td className="px-6 py-4 whitespace-nowrap"><div className="flex flex-wrap gap-1"><span className="px-2 py-1 bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-200 rounded text-xs font-medium">{question.subject || 'N/A'}</span><span className="px-2 py-1 bg-gray-100 dark:bg-gray-700/50 text-gray-700 dark:text-gray-300 rounded text-xs">{question.year || '?'}</span></div></td>
@@ -860,4 +912,5 @@ export function Practice() {
     </div>
   );
 }
+
 
