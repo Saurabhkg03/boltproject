@@ -1,11 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, CheckCircle, XCircle, Loader2, BookOpen, Bookmark, Calendar, RefreshCcw, Save, Timer as TimerIcon, Play, Pause, LogIn, Check as CheckIcon, X as XIcon, FolderPlus, ListPlus, RotateCcw } from 'lucide-react';
+import { ArrowLeft, ArrowRight, CheckCircle, XCircle, Loader2, BookOpen, Bookmark, Calendar, RefreshCcw, Save, Timer as TimerIcon, Play, Pause, LogIn, Check as CheckIcon, X as XIcon, FolderPlus, ListPlus, RotateCcw, ClipboardList } from 'lucide-react';
 
 import { doc, getDoc, setDoc, collection, getDocs, updateDoc, deleteDoc, arrayUnion, arrayRemove, query, serverTimestamp, writeBatch, orderBy, addDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { Question, Submission, UserQuestionData, QuestionList } from '../data/mockData';
+// --- IMPORT THE METADATA HOOK ---
+import { useMetadata } from '../contexts/MetadataContext';
 
 // Declare KaTeX auto-render function from the global scope
 declare global {
@@ -20,25 +22,18 @@ const RATING_SCALING_FACTOR = 100;
 
 /**
  * Calculates the user's performance rating.
- * @param {number | undefined} accuracy - The user's accuracy (0-100).
- * @param {number | undefined} correct - The user's total correct answers.
- * @returns {number} The calculated rating.
  */
 const calculateRating = (accuracy: number | undefined, correct: number | undefined): number => {
     const safeAccuracy = accuracy ?? 0;
     const safeCorrect = correct ?? 0;
-    // Rating = (Accuracy / 100) * log10(CorrectlySolved + 1) * ScalingFactor
     const rating = Math.max(0, (safeAccuracy / 100) * Math.log10(safeCorrect + 1) * RATING_SCALING_FACTOR);
     return parseFloat(rating.toFixed(2));
 };
 
 /**
  * Formats a Date object to 'YYYY-MM-DD' string.
- * @param {Date | string} date The date to format.
- * @returns {string | null} A string in 'YYYY-MM-DD' format or null if invalid.
  */
 function formatDate(date: Date | string): string | null {
-    // Ensure it's a Date object
     if (!(date instanceof Date)) {
         try {
             date = new Date(date);
@@ -48,15 +43,11 @@ function formatDate(date: Date | string): string | null {
             return null;
         }
     }
-    // toISOString() returns 'YYYY-MM-DDTHH:mm:ss.sssZ', we just want the date part.
     return date.toISOString().split('T')[0];
 }
 
 /**
  * Calculates the difference in days between two dates.
- * @param {Date} date1 Newer date.
- * @param {Date} date2 Older date.
- * @returns {number} The difference in days.
  */
 function getDayDiff(date1: Date, date2: Date): number {
     const d1 = new Date(date1.toDateString()); // Normalize to start of day
@@ -105,7 +96,7 @@ const LoginPrompt = () => {
     );
 };
 
-// --- NEW: Lists Management Modal ---
+// --- Lists Management Modal ---
 const ListsModal = ({
   isOpen,
   onClose,
@@ -131,13 +122,11 @@ const ListsModal = ({
       const fetchLists = async () => {
         setLoadingLists(true);
         try {
-          // Fetch all lists for the user
           const listsQuery = query(collection(db, `users/${userId}/questionLists`), orderBy('createdAt', 'desc'));
           const listsSnapshot = await getDocs(listsQuery);
           const userLists = listsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as QuestionList));
           setLists(userLists);
 
-          // Fetch which lists this specific question is in
           const userQuestionDataRef = doc(db, `users/${userId}/userQuestionData`, questionId);
           const userQuestionDataSnap = await getDoc(userQuestionDataRef);
           if (userQuestionDataSnap.exists()) {
@@ -156,7 +145,6 @@ const ListsModal = ({
     }
   }, [isOpen, userId, questionId]);
 
-  // Toggle question in a list
   const handleToggleList = (listId: string) => {
     setQuestionListIds(prev => {
       const newSet = new Set(prev);
@@ -169,14 +157,13 @@ const ListsModal = ({
     });
   };
 
-  // Create a new list
   const handleCreateList = async (e: React.FormEvent) => {
       e.preventDefault();
       if (!newListName.trim() || creatingList) return;
       
       setCreatingList(true);
       try {
-          const newListData: Omit<QuestionList, 'id' | 'createdAt'> = { // createdAt will be set by server
+          const newListData: Omit<QuestionList, 'id' | 'createdAt'> = {
               uid: userId,
               name: newListName.trim(),
               questionIds: [questionId], // Automatically add current question
@@ -184,15 +171,12 @@ const ListsModal = ({
           };
           
           const listCollectionRef = collection(db, `users/${userId}/questionLists`);
-          // Add server timestamp
           const docRef = await addDoc(listCollectionRef, {
               ...newListData,
               createdAt: serverTimestamp() 
           });
           
-          // Add new list to local state
           setLists(prev => [{ ...newListData, id: docRef.id, questionIds: [questionId], createdAt: new Date().toISOString() }, ...prev]);
-          // Add to selected lists
           handleToggleList(docRef.id);
           setNewListName("");
           
@@ -203,17 +187,14 @@ const ListsModal = ({
       }
   };
 
-  // Save all changes
   const handleSaveChanges = async () => {
     setSaving(true);
     const batch = writeBatch(db);
     const newSavedListIds = Array.from(questionListIds);
 
-    // 1. Update the UserQuestionData doc
     const userQuestionDataRef = doc(db, `users/${userId}/userQuestionData`, questionId);
     batch.set(userQuestionDataRef, { savedListIds: newSavedListIds }, { merge: true });
 
-    // 2. Update all list docs
     lists.forEach(list => {
       const questionIsInList = list.questionIds && list.questionIds.includes(questionId);
       const questionShouldBeInList = questionListIds.has(list.id);
@@ -221,17 +202,15 @@ const ListsModal = ({
       const listRef = doc(db, `users/${userId}/questionLists`, list.id);
 
       if (questionShouldBeInList && !questionIsInList) {
-        // Add question to list
         batch.update(listRef, { questionIds: arrayUnion(questionId) });
       } else if (!questionShouldBeInList && questionIsInList) {
-        // Remove question from list
         batch.update(listRef, { questionIds: arrayRemove(questionId) });
       }
     });
 
     try {
       await batch.commit();
-      onClose(); // Close modal on success
+      onClose();
     } catch (error) {
       console.error("Error saving list changes:", error);
     } finally {
@@ -255,7 +234,6 @@ const ListsModal = ({
             </div>
         ) : (
             <>
-                {/* New List Form */}
                 <form onSubmit={handleCreateList} className="flex gap-2 mb-4">
                     <input
                         type="text"
@@ -269,7 +247,6 @@ const ListsModal = ({
                     </button>
                 </form>
 
-                {/* Lists Checkboxes */}
                 <div className="max-h-60 overflow-y-auto space-y-2 mb-4 pr-1">
                     {lists.length === 0 && (
                         <p className="text-sm text-slate-500 dark:text-slate-400 text-center py-4">No lists created yet.</p>
@@ -290,7 +267,6 @@ const ListsModal = ({
                     ))}
                 </div>
 
-                {/* Save Button */}
                 <button
                     onClick={handleSaveChanges}
                     disabled={saving}
@@ -312,9 +288,12 @@ export function QuestionDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user, userInfo, setUserInfo, loading: loadingAuth, isAuthenticated } = useAuth();
+  // --- FIX: Import metadata ---
+  const { metadata, loading: metadataLoading } = useMetadata();
 
   const [question, setQuestion] = useState<Question | null>(null);
-  const [allQuestions, setAllQuestions] = useState<Question[]>([]);
+  // --- FIX: Removed allQuestions state ---
+  // const [allQuestions, setAllQuestions] = useState<Question[]>([]);
   const [loadingData, setLoadingData] = useState(true);
 
   const [selectedOptions, setSelectedOptions] = useState<string[]>([]);
@@ -355,6 +334,7 @@ export function QuestionDetail() {
       setIsTimerOn(false);
 
       try {
+        // --- This part is perfect, it only fetches 1 question ---
         const docRef = doc(db, 'questions', id);
         const docSnap = await getDoc(docRef);
 
@@ -362,6 +342,7 @@ export function QuestionDetail() {
           const fetchedQuestion = { id: docSnap.id, ...docSnap.data() } as Question;
           setQuestion(fetchedQuestion);
 
+          // --- This part is also perfect, it only fetches 2 user-specific docs ---
           if (user && isAuthenticated && !loadingAuth) {
             const submissionRef = doc(db, `users/${user.uid}/submissions`, id);
             const userQuestionDataRef = doc(db, `users/${user.uid}/userQuestionData`, id);
@@ -387,18 +368,9 @@ export function QuestionDetail() {
           setQuestion(null);
         }
 
-        // Fetch all questions only once if not already fetched
-        if (allQuestions.length === 0) {
-          const questionsQuery = query(collection(db, 'questions'), orderBy('title'));
-          const querySnapshot = await getDocs(questionsQuery);
-          const questionsData = querySnapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as Question));
-          questionsData.sort((a, b) => {
-              const numA = parseInt((a.title || '0').replace(/\D/g,''), 10) || 0;
-              const numB = parseInt((b.title || '0').replace(/\D/g,''), 10) || 0;
-              return numA - numB;
-          });
-          setAllQuestions(questionsData);
-        }
+        // --- FIX: REMOVED the expensive 2500+ read operation ---
+        // if (allQuestions.length === 0) { ... }
+
       } catch (error) {
         console.error("Error fetching question data:", error);
       } finally {
@@ -410,7 +382,7 @@ export function QuestionDetail() {
     return () => {
         if(timerRef.current) clearInterval(timerRef.current);
     }
-  }, [id, user, loadingAuth, isAuthenticated, setUserInfo]); // Removed allQuestions
+  }, [id, user, loadingAuth, isAuthenticated, setUserInfo]);
 
 
     // Dedicated effect for timer logic
@@ -524,8 +496,6 @@ export function QuestionDetail() {
     setIsCorrect(userCorrect);
     setSubmitted(true);
 
-    // 1. Create submission document
-    // --- FIX: Use Partial<Submission> and conditionally add timeTaken ---
     const submissionData: Partial<Submission> = {
       qid: question.id,
       uid: user.uid,
@@ -533,27 +503,21 @@ export function QuestionDetail() {
       timestamp: today.toISOString(),
       selectedOptions: selectedOptions, 
       natAnswer: natAnswer,
-      // timeTaken is omitted if 0
     };
 
     if (timeElapsed > 0) {
-        submissionData.timeTaken = timeElapsed; // Conditionally add the field
+        submissionData.timeTaken = timeElapsed;
     }
-    // --- END FIX ---
 
     try {
-      // 2. Get current user data for incremental update
-      // We use userInfo from context as the "old data"
       const oldStats = userInfo.stats || { attempted: 0, correct: 0, accuracy: 0, subjects: {} };
       const oldStreak = userInfo.streakData || { currentStreak: 0, lastSubmissionDate: '' };
       const oldCalendar = userInfo.activityCalendar || {};
 
-      // 3. Calculate new stats
       const newStats = { ...oldStats, subjects: { ...(oldStats.subjects || {}) } };
       newStats.attempted = (newStats.attempted || 0) + 1;
       if (userCorrect) {
         newStats.correct = (newStats.correct || 0) + 1;
-        // Update subject stats
         const subject = question.subject;
         if (subject && subject !== "General" && subject !== "N/A") {
           newStats.subjects[subject] = (newStats.subjects[subject] || 0) + 1;
@@ -561,7 +525,6 @@ export function QuestionDetail() {
       }
       newStats.accuracy = newStats.attempted > 0 ? parseFloat(((newStats.correct / newStats.attempted) * 100).toFixed(2)) : 0;
 
-      // 4. Calculate new streak
       const newStreakData = { ...oldStreak };
       if (todayStr !== oldStreak.lastSubmissionDate) {
         const lastSubDate = oldStreak.lastSubmissionDate ? new Date(oldStreak.lastSubmissionDate + 'T00:00:00') : null;
@@ -573,20 +536,16 @@ export function QuestionDetail() {
         newStreakData.lastSubmissionDate = todayStr;
       }
 
-      // 5. Calculate new calendar
       const newCalendar = { ...oldCalendar };
       newCalendar[todayStr] = (newCalendar[todayStr] || 0) + 1;
 
-      // 6. Calculate new rating
       const newRating = calculateRating(newStats.accuracy, newStats.correct);
 
-      // 7. Write all updates to the database
       const userDocRef = doc(db, 'users', user.uid);
       const submissionDocRef = doc(db, `users/${user.uid}/submissions`, question.id);
 
-      // Use a batch write for atomicity (submission + user stats)
       const batch = writeBatch(db);
-      batch.set(submissionDocRef, submissionData); // Save the submission
+      batch.set(submissionDocRef, submissionData as Submission); // Save the submission
       batch.update(userDocRef, { // Update the main user doc
           stats: newStats,
           streakData: newStreakData,
@@ -597,8 +556,6 @@ export function QuestionDetail() {
       await batch.commit();
       console.log("Successfully submitted and updated user stats.");
 
-      // 8. Update local context state immediately
-      // This provides a snappy UI response while the onSnapshot listener confirms the change
       setUserInfo(prev => prev ? {
           ...prev,
           stats: newStats,
@@ -609,7 +566,6 @@ export function QuestionDetail() {
 
     } catch (error) {
         console.error("Error saving submission/updating stats:", error);
-        // Revert UI on failure
         setSubmitted(false);
         setIsCorrect(false);
     }
@@ -621,10 +577,7 @@ export function QuestionDetail() {
     setResetting(true);
 
     try {
-        // 1. Get old data from context
         const oldStats = userInfo.stats || { attempted: 0, correct: 0, accuracy: 0, subjects: {} };
-
-        // 2. Calculate new stats by reverting
         const newStats = { ...oldStats, subjects: { ...(oldStats.subjects || {}) } };
         
         if (newStats.attempted > 0) {
@@ -632,20 +585,15 @@ export function QuestionDetail() {
         }
         if (isCorrect && newStats.correct > 0) {
             newStats.correct -= 1;
-            // Revert subject stats
             const subject = question.subject;
-            if (subject && subject !== "General" && subject !== "N/A" && newStats.subjects[subject] > 0) {
+            if (subject && subject !== "General" && subject !== "N/A" && (newStats.subjects[subject] || 0) > 0) {
                 newStats.subjects[subject] -= 1;
             }
         }
         newStats.accuracy = newStats.attempted > 0 ? parseFloat(((newStats.correct / newStats.attempted) * 100).toFixed(2)) : 0;
 
-        // 3. Calculate new rating
         const newRating = calculateRating(newStats.accuracy, newStats.correct);
         
-        // 4. Write all updates
-        // NOTE: We do NOT update calendar or streak here.
-        // It's too complex to revert, and the migration script can fix any rare discrepancies.
         const userDocRef = doc(db, 'users', user.uid);
         const submissionDocRef = doc(db, `users/${user.uid}/submissions`, question.id);
 
@@ -654,19 +602,19 @@ export function QuestionDetail() {
         batch.update(userDocRef, { // Update stats and rating
             stats: newStats,
             rating: newRating
+            // Note: We don't revert streak or calendar. This is complex
+            // and can be fixed by a re-run of the migration script if needed.
         });
 
         await batch.commit();
         console.log("Successfully reset submission and updated user stats.");
 
-        // 5. Update local context state immediately
         setUserInfo(prev => prev ? { 
             ...prev, 
             stats: newStats, 
             rating: newRating 
         } : null);
 
-        // 6. Reset local page state
         setSubmitted(false);
         setSelectedOptions([]);
         setNatAnswer('');
@@ -681,13 +629,44 @@ export function QuestionDetail() {
     }
   };
   
+  // --- *** FIX: handleToggleFavorite now updates both documents *** ---
   const handleToggleFavorite = async () => {
     if (!user || !id) return;
     const newFavoriteStatus = !isFavorite;
     setIsFavorite(newFavoriteStatus); // Update UI immediately
+
+    // Create references for BOTH documents
     const userQuestionDataRef = doc(db, `users/${user.uid}/userQuestionData`, id);
+    const favoritesListRef = doc(db, `users/${user.uid}/questionLists`, 'favorites');
+
     try {
-        await setDoc(userQuestionDataRef, { isFavorite: newFavoriteStatus }, { merge: true });
+        // Use a batch write to update both documents atomically
+        const batch = writeBatch(db);
+
+        // 1. Update the userQuestionData document (sets isFavorite flag)
+        batch.set(userQuestionDataRef, { isFavorite: newFavoriteStatus }, { merge: true });
+
+        // 2. Update the 'favorites' list document (adds/removes from the array)
+        if (newFavoriteStatus) {
+            // Add question to favorites list
+            batch.set(favoritesListRef, { 
+                questionIds: arrayUnion(id),
+                // Add other fields in case the doc doesn't exist yet
+                name: "Favorites",
+                uid: user.uid,
+                createdAt: serverTimestamp() // Set timestamp if creating
+            }, { merge: true }); // Use merge:true to create if not exists
+        } else {
+            // Remove question from favorites list
+            // Use update - this will fail gracefully if the doc or array doesn't exist
+            batch.update(favoritesListRef, { 
+                questionIds: arrayRemove(id) 
+            });
+        }
+        
+        await batch.commit();
+        console.log("Favorite status and favorites list updated.");
+
     } catch (error) {
         console.error("Error toggling favorite status:", error);
         setIsFavorite(!newFavoriteStatus); // Revert UI on error
@@ -707,22 +686,26 @@ export function QuestionDetail() {
       }
   }
   
+  // --- FIX: Rewritten to use metadata ID array ---
   const findNextQuestionId = () => {
-    if (!id || allQuestions.length === 0) return null;
-    const currentIndex = allQuestions.findIndex(q => q.id === id);
-    if (currentIndex > -1 && currentIndex < allQuestions.length - 1) {
-      return allQuestions[currentIndex + 1].id;
+    if (!id || !metadata?.allQuestionIds) return null;
+    const currentIndex = metadata.allQuestionIds.indexOf(id);
+    if (currentIndex > -1 && currentIndex < metadata.allQuestionIds.length - 1) {
+      return metadata.allQuestionIds[currentIndex + 1];
     }
     return null;
   };
+  
+  // --- FIX: Rewritten to use metadata ID array ---
   const findPrevQuestionId = () => {
-    if (!id || allQuestions.length === 0) return null;
-    const currentIndex = allQuestions.findIndex(q => q.id === id);
+    if (!id || !metadata?.allQuestionIds) return null;
+    const currentIndex = metadata.allQuestionIds.indexOf(id);
     if (currentIndex > 0) {
-      return allQuestions[currentIndex - 1].id;
+      return metadata.allQuestionIds[currentIndex - 1];
     }
     return null;
   };
+
   const handleNext = () => {
     const nextId = findNextQuestionId();
     if (nextId) {
@@ -738,7 +721,8 @@ export function QuestionDetail() {
     }
   };
 
-  if (loadingData) {
+  // --- FIX: Add metadataLoading to the check ---
+  if (loadingData || metadataLoading) {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex items-center justify-center">
         <Loader2 className="w-12 h-12 text-blue-600 animate-spin" />
@@ -763,6 +747,16 @@ export function QuestionDetail() {
       </div>
     );
   }
+
+  // --- NEW: Helper function for question type colors ---
+  const getQuestionTypeColor = (type: string | undefined) => {
+    switch (type) {
+      case 'mcq': return 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/50 border border-blue-200 dark:border-blue-800/50';
+      case 'msq': return 'text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-950/50 border border-purple-200 dark:border-purple-800/50';
+      case 'nat': return 'text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/50 border border-indigo-200 dark:border-indigo-800/50';
+      default: return 'text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/50';
+    }
+  };
   
   const cleanedQuestionHtml = extractAndCleanHtml(question.question_html, 'question_text');
   const cleanedExplanationHtml = extractAndCleanHtml(question.explanation_html, 'mtq_explanation-text');
@@ -862,8 +856,11 @@ export function QuestionDetail() {
 
                     </div>
                 </div>
+              {/* --- MODIFIED: Added Question Type Badge --- */}
               <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-gray-600 dark:text-gray-400">
-                {/* MODIFIED: Removed Difficulty span */}
+                <span className={`flex items-center gap-1 px-2 py-0.5 rounded-full font-medium uppercase ${getQuestionTypeColor(question.question_type)}`}>
+                  <ClipboardList className="w-3.5 h-3.5" /> {question.question_type || 'N/A'}
+                </span>
                 <span className="flex items-center gap-1"><BookOpen className="w-3.5 h-3.5" /> {question.subject}</span>
                 <span className="flex items-center gap-1"><Bookmark className="w-3.5 h-3.5" /> {question.topic}</span>
                 <span className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5" /> GATE {question.year}</span>
@@ -989,7 +986,6 @@ export function QuestionDetail() {
                         {isCorrect ? <CheckCircle className="w-6 h-6 text-green-600" /> : <XCircle className="w-6 h-6 text-red-600" />}
                         <span className={`font-semibold ${isCorrect ? 'text-green-800 dark:text-green-200' : 'text-red-800 dark:text-red-200'}`}>
                           {isCorrect ? 'Correct!' : 'Incorrect.'}
-                          {/* MODIFIED: Show correct answer label(s) */}
                           {/* --- FIX: Show correct NAT range --- */}
                           {question.question_type === 'nat' && !isCorrect && ` The correct answer is between ${question.nat_answer_min || 'N/A'} and ${question.nat_answer_max || 'N/A'}.`}
                           {/* --- END FIX --- */}
