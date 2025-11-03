@@ -1,15 +1,10 @@
-import { useState, useEffect, useRef, useMemo } from 'react'; // MODIFIED: Added useMemo
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-// MODIFIED: Added FolderPlus, ListPlus, CheckIcon, and RotateCcw
-import { ArrowLeft, ArrowRight, CheckCircle, XCircle, Loader2, BookOpen, Bookmark, Calendar, RefreshCcw, Save, AlertTriangle, Timer as TimerIcon, Play, Pause, LogIn, Check as CheckIcon, Plus, Folder, X as XIcon, FolderPlus, ListPlus, RotateCcw } from 'lucide-react';
+import { ArrowLeft, ArrowRight, CheckCircle, XCircle, Loader2, BookOpen, Bookmark, Calendar, RefreshCcw, Save, Timer as TimerIcon, Play, Pause, LogIn, Check as CheckIcon, X as XIcon, FolderPlus, ListPlus, RotateCcw } from 'lucide-react';
 
-// MODIFIED: Added query, where, orderBy, serverTimestamp, writeBatch
-import { doc, getDoc, setDoc, collection, getDocs, updateDoc, deleteDoc, arrayUnion, arrayRemove, onSnapshot, query, where, serverTimestamp, writeBatch, orderBy, addDoc } from 'firebase/firestore'; // MODIFIED: Added addDoc
-// MODIFIED: Corrected import path, removed .ts extension
+import { doc, getDoc, setDoc, collection, getDocs, updateDoc, deleteDoc, arrayUnion, arrayRemove, query, serverTimestamp, writeBatch, orderBy, addDoc } from 'firebase/firestore';
 import { db } from '../firebase';
-// MODIFIED: Corrected import path, removed .tsx extension
 import { useAuth } from '../contexts/AuthContext';
-// MODIFIED: Corrected import path and added QuestionList, removed .ts extension
 import { Question, Submission, UserQuestionData, QuestionList } from '../data/mockData';
 
 // Declare KaTeX auto-render function from the global scope
@@ -19,23 +14,63 @@ declare global {
   }
 }
 
-// ... (interfaces Question, Submission, UserQuestionData remain the same) ...
-// MODIFIED: Removed extra closing brace (was already correct in file)
-/*
-interface UserQuestionData {
-    isFavorite?: boolean; // Renamed from isMarkedAsDoubt
-    note?: string;
-    savedListIds?: string[]; // NEW: Array of list IDs
-}
-*/
-
 // --- UTILITY FUNCTIONS ---
+
+const RATING_SCALING_FACTOR = 100;
+
+/**
+ * Calculates the user's performance rating.
+ * @param {number | undefined} accuracy - The user's accuracy (0-100).
+ * @param {number | undefined} correct - The user's total correct answers.
+ * @returns {number} The calculated rating.
+ */
+const calculateRating = (accuracy: number | undefined, correct: number | undefined): number => {
+    const safeAccuracy = accuracy ?? 0;
+    const safeCorrect = correct ?? 0;
+    // Rating = (Accuracy / 100) * log10(CorrectlySolved + 1) * ScalingFactor
+    const rating = Math.max(0, (safeAccuracy / 100) * Math.log10(safeCorrect + 1) * RATING_SCALING_FACTOR);
+    return parseFloat(rating.toFixed(2));
+};
+
+/**
+ * Formats a Date object to 'YYYY-MM-DD' string.
+ * @param {Date | string} date The date to format.
+ * @returns {string | null} A string in 'YYYY-MM-DD' format or null if invalid.
+ */
+function formatDate(date: Date | string): string | null {
+    // Ensure it's a Date object
+    if (!(date instanceof Date)) {
+        try {
+            date = new Date(date);
+            if (isNaN(date.getTime())) throw new Error("Invalid date");
+        } catch (e) {
+            console.warn("Could not parse date:", date, (e as Error).message);
+            return null;
+        }
+    }
+    // toISOString() returns 'YYYY-MM-DDTHH:mm:ss.sssZ', we just want the date part.
+    return date.toISOString().split('T')[0];
+}
+
+/**
+ * Calculates the difference in days between two dates.
+ * @param {Date} date1 Newer date.
+ * @param {Date} date2 Older date.
+ * @returns {number} The difference in days.
+ */
+function getDayDiff(date1: Date, date2: Date): number {
+    const d1 = new Date(date1.toDateString()); // Normalize to start of day
+    const d2 = new Date(date2.toDateString()); // Normalize to start of day
+    const diffTime = Math.abs(d1.getTime() - d2.getTime());
+    return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+}
+
 const extractAndCleanHtml = (html: string, contentClass?: string): string => {
   if (!html) return '';
   let clean = html.replace(/<noscript>[\s\S]*?<\/noscript>/gi, '');
   clean = clean.replace(/<img[^>]*>/gi, '');
   if (contentClass) {
-    const regex = new RegExp(`<div[^>]*class=["'][^"']*${contentClass}[^"']*["'][^>]*>([\\s\S]*?)<\/div>`, 'i');
+    const regex = new RegExp(`<div[^>]*class=["'][^"']*${contentClass}[^"']*["'][^>]*>([\\s\\S]*?)<\/div>`, 'i');
     const match = clean.match(regex);
     if (match && match[1]) {
       return match[1].trim();
@@ -282,23 +317,16 @@ export function QuestionDetail() {
   const [allQuestions, setAllQuestions] = useState<Question[]>([]);
   const [loadingData, setLoadingData] = useState(true);
 
-  // NEW: State for user's lists and modal
-  const [userQuestionData, setUserQuestionData] = useState<UserQuestionData | null>(null);
-  const [isListModalOpen, setIsListModalOpen] = useState(false);
-
-  // MODIFIED: State for selected options (array for MSQ)
   const [selectedOptions, setSelectedOptions] = useState<string[]>([]);
   const [natAnswer, setNatAnswer] = useState('');
   const [submitted, setSubmitted] = useState(false);
   const [isCorrect, setIsCorrect] = useState(false);
   const [resetting, setResetting] = useState(false);
 
-  // MODIFIED: Renamed from isDoubt
   const [isFavorite, setIsFavorite] = useState(false);
   const [note, setNote] = useState('');
   const [savingNote, setSavingNote] = useState(false);
   
-  // NEW: State for list modal
   const [showListModal, setShowListModal] = useState(false);
 
   const [timeElapsed, setTimeElapsed] = useState(0);
@@ -309,7 +337,6 @@ export function QuestionDetail() {
   const explanationRef = useRef<HTMLDivElement>(null);
   const optionsRef = useRef<(HTMLButtonElement | null)[]>([]);
 
-  // NEW: Handler to reset the timer
   const handleResetTimer = () => {
     setTimeElapsed(0);
   };
@@ -320,14 +347,12 @@ export function QuestionDetail() {
       if(timerRef.current) clearInterval(timerRef.current);
       setLoadingData(true);
       setSubmitted(false);
-      // MODIFIED: Reset array
       setSelectedOptions([]);
       setNatAnswer('');
-      setIsFavorite(false); // MODIFIED
+      setIsFavorite(false);
       setNote('');
       setTimeElapsed(0);
       setIsTimerOn(false);
-      setUserQuestionData(null); // Reset user data
 
       try {
         const docRef = doc(db, 'questions', id);
@@ -348,16 +373,14 @@ export function QuestionDetail() {
               const sub = submissionSnap.data() as Submission;
               setSubmitted(true);
               setIsCorrect(sub.correct);
-              // MODIFIED: Set array from submission
               setSelectedOptions(sub.selectedOptions || []);
               setNatAnswer(sub.natAnswer || '');
               setTimeElapsed(sub.timeTaken || 0);
             }
             if (userQuestionDataSnap.exists()) {
                 const data = userQuestionDataSnap.data() as UserQuestionData;
-                setIsFavorite(data.isFavorite || false); // Use isFavorite
+                setIsFavorite(data.isFavorite || false);
                 setNote(data.note || '');
-                setUserQuestionData(data); // Store all data
             }
           }
         } else {
@@ -366,14 +389,10 @@ export function QuestionDetail() {
 
         // Fetch all questions only once if not already fetched
         if (allQuestions.length === 0) {
-          // MODIFIED: Added query() and orderBy()
           const questionsQuery = query(collection(db, 'questions'), orderBy('title'));
           const querySnapshot = await getDocs(questionsQuery);
-          // MODIFIED: Corrected spread syntax to doc.id
           const questionsData = querySnapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as Question));
-          // Consistent sorting based on title (numeric part)
           questionsData.sort((a, b) => {
-              // Extract numbers more robustly
               const numA = parseInt((a.title || '0').replace(/\D/g,''), 10) || 0;
               const numB = parseInt((b.title || '0').replace(/\D/g,''), 10) || 0;
               return numA - numB;
@@ -391,7 +410,7 @@ export function QuestionDetail() {
     return () => {
         if(timerRef.current) clearInterval(timerRef.current);
     }
-  }, [id, user, loadingAuth, isAuthenticated, setUserInfo]); // Removed allQuestions from dependencies
+  }, [id, user, loadingAuth, isAuthenticated, setUserInfo]); // Removed allQuestions
 
 
     // Dedicated effect for timer logic
@@ -447,21 +466,19 @@ export function QuestionDetail() {
         }, 100);
     } else {
         const renderTimeout = setTimeout(renderKatex, 50);
-         return () => clearTimeout(renderTimeout);
+        return () => clearTimeout(renderTimeout);
     }
 
-     return () => {
-       if (katexReadyCheckInterval !== null) clearInterval(katexReadyCheckInterval);
-     };
+    return () => {
+      if (katexReadyCheckInterval !== null) clearInterval(katexReadyCheckInterval);
+    };
   }, [question, loadingData, submitted]);
 
-  // MODIFIED: Handler for MCQ selection
   const handleMcqSelect = (label: string) => {
     if (submitted || !isAuthenticated) return;
     setSelectedOptions([label]);
   };
 
-  // MODIFIED: Handler for MSQ selection
   const handleMsqToggle = (label: string) => {
     if (submitted || !isAuthenticated) return;
     setSelectedOptions(prev =>
@@ -472,86 +489,191 @@ export function QuestionDetail() {
   };
 
 
+  // --- *** UPDATED: handleSubmit with incremental stats *** ---
   const handleSubmit = async () => {
     if (!user || !question || !userInfo || submitted) return;
     setIsTimerOn(false);
     let userCorrect = false;
+    const today = new Date();
+    const todayStr = formatDate(today); // 'YYYY-MM-DD'
+    if (!todayStr) {
+        console.error("Could not format today's date.");
+        return;
+    }
 
-    // MODIFIED: Updated submission logic for all types
     if (question.question_type === 'nat') {
-      // NAT Logic
-      userCorrect = natAnswer.trim() === question.nat_answer;
+      const userAnswer = parseFloat(natAnswer.trim());
+      const min = parseFloat(question.nat_answer_min || '-Infinity');
+      const max = parseFloat(question.nat_answer_max || 'Infinity');
+      if (isNaN(userAnswer)) {
+          userCorrect = false;
+      } else {
+          userCorrect = userAnswer >= min && userAnswer <= max;
+      }
     } else if (question.question_type === 'msq') {
-      // MSQ Logic: No partial credit
       const correctLabels = new Set(question.options.filter(o => o.is_correct).map(o => o.label));
       const selectedLabels = new Set(selectedOptions);
       userCorrect = correctLabels.size === selectedLabels.size &&
                     [...correctLabels].every(label => selectedLabels.has(label));
     } else {
-      // MCQ Logic
-      if (!selectedOptions[0]) return; // Nothing selected for MCQ
+      if (!selectedOptions[0]) return;
       const correctOption = question.options.find(opt => opt.is_correct);
       userCorrect = selectedOptions[0] === correctOption?.label;
     }
     
     setIsCorrect(userCorrect);
     setSubmitted(true);
+
+    // 1. Create submission document
+    // --- FIX: Use Partial<Submission> and conditionally add timeTaken ---
     const submissionData: Partial<Submission> = {
       qid: question.id,
       uid: user.uid,
       correct: userCorrect,
-      timestamp: new Date().toISOString(),
-      // MODIFIED: Save the array
+      timestamp: today.toISOString(),
       selectedOptions: selectedOptions, 
       natAnswer: natAnswer,
+      // timeTaken is omitted if 0
     };
+
     if (timeElapsed > 0) {
-        submissionData.timeTaken = timeElapsed;
+        submissionData.timeTaken = timeElapsed; // Conditionally add the field
     }
+    // --- END FIX ---
+
     try {
-        await setDoc(doc(db, `users/${user.uid}/submissions`, question.id), submissionData);
-        // Update User Stats
-        const newStats = { ...userInfo.stats };
-        newStats.attempted = (newStats.attempted || 0) + 1;
-        if (userCorrect) {
-          newStats.correct = (newStats.correct || 0) + 1;
+      // 2. Get current user data for incremental update
+      // We use userInfo from context as the "old data"
+      const oldStats = userInfo.stats || { attempted: 0, correct: 0, accuracy: 0, subjects: {} };
+      const oldStreak = userInfo.streakData || { currentStreak: 0, lastSubmissionDate: '' };
+      const oldCalendar = userInfo.activityCalendar || {};
+
+      // 3. Calculate new stats
+      const newStats = { ...oldStats, subjects: { ...(oldStats.subjects || {}) } };
+      newStats.attempted = (newStats.attempted || 0) + 1;
+      if (userCorrect) {
+        newStats.correct = (newStats.correct || 0) + 1;
+        // Update subject stats
+        const subject = question.subject;
+        if (subject && subject !== "General" && subject !== "N/A") {
+          newStats.subjects[subject] = (newStats.subjects[subject] || 0) + 1;
         }
-        newStats.accuracy = newStats.attempted > 0 ? (newStats.correct / newStats.attempted) * 100 : 0;
-        const userDocRef = doc(db, 'users', user.uid);
-        await updateDoc(userDocRef, { stats: newStats });
-        setUserInfo(prev => prev ? { ...prev, stats: newStats } : null);
+      }
+      newStats.accuracy = newStats.attempted > 0 ? parseFloat(((newStats.correct / newStats.attempted) * 100).toFixed(2)) : 0;
+
+      // 4. Calculate new streak
+      const newStreakData = { ...oldStreak };
+      if (todayStr !== oldStreak.lastSubmissionDate) {
+        const lastSubDate = oldStreak.lastSubmissionDate ? new Date(oldStreak.lastSubmissionDate + 'T00:00:00') : null;
+        if (lastSubDate && getDayDiff(today, lastSubDate) === 1) {
+            newStreakData.currentStreak = (oldStreak.currentStreak || 0) + 1;
+        } else {
+            newStreakData.currentStreak = 1; // Reset or start streak
+        }
+        newStreakData.lastSubmissionDate = todayStr;
+      }
+
+      // 5. Calculate new calendar
+      const newCalendar = { ...oldCalendar };
+      newCalendar[todayStr] = (newCalendar[todayStr] || 0) + 1;
+
+      // 6. Calculate new rating
+      const newRating = calculateRating(newStats.accuracy, newStats.correct);
+
+      // 7. Write all updates to the database
+      const userDocRef = doc(db, 'users', user.uid);
+      const submissionDocRef = doc(db, `users/${user.uid}/submissions`, question.id);
+
+      // Use a batch write for atomicity (submission + user stats)
+      const batch = writeBatch(db);
+      batch.set(submissionDocRef, submissionData); // Save the submission
+      batch.update(userDocRef, { // Update the main user doc
+          stats: newStats,
+          streakData: newStreakData,
+          activityCalendar: newCalendar,
+          rating: newRating
+      });
+      
+      await batch.commit();
+      console.log("Successfully submitted and updated user stats.");
+
+      // 8. Update local context state immediately
+      // This provides a snappy UI response while the onSnapshot listener confirms the change
+      setUserInfo(prev => prev ? {
+          ...prev,
+          stats: newStats,
+          streakData: newStreakData,
+          activityCalendar: newCalendar,
+          rating: newRating
+      } : null);
+
     } catch (error) {
         console.error("Error saving submission/updating stats:", error);
+        // Revert UI on failure
         setSubmitted(false);
         setIsCorrect(false);
     }
   };
   
+  // --- *** UPDATED: handleTryAgain with incremental stats *** ---
   const handleTryAgain = async () => {
     if (!user || !question || !userInfo || resetting) return;
     setResetting(true);
+
     try {
-        const newStats = { ...userInfo.stats };
+        // 1. Get old data from context
+        const oldStats = userInfo.stats || { attempted: 0, correct: 0, accuracy: 0, subjects: {} };
+
+        // 2. Calculate new stats by reverting
+        const newStats = { ...oldStats, subjects: { ...(oldStats.subjects || {}) } };
+        
         if (newStats.attempted > 0) {
             newStats.attempted -= 1;
-            if (isCorrect) {
-                newStats.correct -= 1;
+        }
+        if (isCorrect && newStats.correct > 0) {
+            newStats.correct -= 1;
+            // Revert subject stats
+            const subject = question.subject;
+            if (subject && subject !== "General" && subject !== "N/A" && newStats.subjects[subject] > 0) {
+                newStats.subjects[subject] -= 1;
             }
         }
-        newStats.correct = Math.max(0, newStats.correct);
-        newStats.accuracy = newStats.attempted > 0 ? (newStats.correct / newStats.attempted) * 100 : 0;
+        newStats.accuracy = newStats.attempted > 0 ? parseFloat(((newStats.correct / newStats.attempted) * 100).toFixed(2)) : 0;
+
+        // 3. Calculate new rating
+        const newRating = calculateRating(newStats.accuracy, newStats.correct);
+        
+        // 4. Write all updates
+        // NOTE: We do NOT update calendar or streak here.
+        // It's too complex to revert, and the migration script can fix any rare discrepancies.
         const userDocRef = doc(db, 'users', user.uid);
         const submissionDocRef = doc(db, `users/${user.uid}/submissions`, question.id);
-        await updateDoc(userDocRef, { stats: newStats });
-        await deleteDoc(submissionDocRef);
-        setUserInfo(prev => prev ? { ...prev, stats: newStats } : null);
+
+        const batch = writeBatch(db);
+        batch.delete(submissionDocRef); // Delete the submission
+        batch.update(userDocRef, { // Update stats and rating
+            stats: newStats,
+            rating: newRating
+        });
+
+        await batch.commit();
+        console.log("Successfully reset submission and updated user stats.");
+
+        // 5. Update local context state immediately
+        setUserInfo(prev => prev ? { 
+            ...prev, 
+            stats: newStats, 
+            rating: newRating 
+        } : null);
+
+        // 6. Reset local page state
         setSubmitted(false);
-        // MODIFIED: Reset array
         setSelectedOptions([]);
         setNatAnswer('');
         setIsCorrect(false);
         setTimeElapsed(0);
         setIsTimerOn(false);
+
     } catch (error) {
         console.error("Error resetting question:", error);
     } finally {
@@ -559,7 +681,6 @@ export function QuestionDetail() {
     }
   };
   
-  // MODIFIED: Renamed from handleToggleDoubt
   const handleToggleFavorite = async () => {
     if (!user || !id) return;
     const newFavoriteStatus = !isFavorite;
@@ -567,8 +688,6 @@ export function QuestionDetail() {
     const userQuestionDataRef = doc(db, `users/${user.uid}/userQuestionData`, id);
     try {
         await setDoc(userQuestionDataRef, { isFavorite: newFavoriteStatus }, { merge: true });
-        // Update local userQuestionData state
-        setUserQuestionData(prev => ({ ...(prev || {}), isFavorite: newFavoriteStatus }));
     } catch (error) {
         console.error("Error toggling favorite status:", error);
         setIsFavorite(!newFavoriteStatus); // Revert UI on error
@@ -581,8 +700,6 @@ export function QuestionDetail() {
       const userQuestionDataRef = doc(db, `users/${user.uid}/userQuestionData`, id);
       try {
           await setDoc(userQuestionDataRef, { note: note }, { merge: true });
-          // Update local userQuestionData state
-          setUserQuestionData(prev => ({ ...(prev || {}), note: note }));
       } catch (error) {
           console.error("Error saving note: ", error);
       } finally {
@@ -611,7 +728,7 @@ export function QuestionDetail() {
     if (nextId) {
       navigate(`/question/${nextId}`);
     } else {
-       navigate('/practice');
+      navigate('/practice');
     }
   };
   const handlePrev = () => {
@@ -646,15 +763,6 @@ export function QuestionDetail() {
       </div>
     );
   }
-
-  const getDifficultyColor = (difficulty: string | undefined) => {
-    switch (difficulty) {
-      case 'Easy': return 'text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-950/50 border border-green-200 dark:border-green-800/50';
-      case 'Medium': return 'text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-950/50 border border-orange-200 dark:border-orange-800/50';
-      case 'Hard': return 'text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-800/50';
-      default: return 'text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/50';
-    }
-  };
   
   const cleanedQuestionHtml = extractAndCleanHtml(question.question_html, 'question_text');
   const cleanedExplanationHtml = extractAndCleanHtml(question.explanation_html, 'mtq_explanation-text');
@@ -699,63 +807,63 @@ export function QuestionDetail() {
 
           <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden shadow-lg">
             <div className="p-6 border-b border-gray-200 dark:border-gray-800">
-               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-3 gap-4">
-                   <h1 className="text-xl md:text-2xl font-bold text-gray-900 dark:text-white flex-1">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-3 gap-4">
+                    <h1 className="text-xl md:text-2xl font-bold text-gray-900 dark:text-white flex-1">
                       {question.title}
-                   </h1>
-                   <div className="flex items-center gap-2 sm:gap-4 flex-shrink-0 w-full sm:w-auto justify-end">
-                      <div className="flex items-center gap-1.5 text-gray-600 dark:text-gray-400 font-medium bg-gray-100 dark:bg-gray-800 px-2.5 py-1 rounded-lg">
-                          <TimerIcon className="w-4 h-4"/>
-                          <span className="text-sm tabular-nums">{formatTime(timeElapsed)}</span>
-                           <button
+                    </h1>
+                    <div className="flex items-center gap-2 sm:gap-4 flex-shrink-0 w-full sm:w-auto justify-end">
+                        <div className="flex items-center gap-1.5 text-gray-600 dark:text-gray-400 font-medium bg-gray-100 dark:bg-gray-800 px-2.5 py-1 rounded-lg">
+                            <TimerIcon className="w-4 h-4"/>
+                            <span className="text-sm tabular-nums">{formatTime(timeElapsed)}</span>
+                            <button
                               onClick={() => setIsTimerOn(!isTimerOn)}
                               disabled={submitted || !isAuthenticated}
                               className="ml-1 p-1 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
                               title={!isAuthenticated ? "Login to use timer" : (isTimerOn ? "Pause timer" : "Start timer")}
-                           >
-                               {isTimerOn ? <Pause className="w-3.5 h-3.5"/> : <Play className="w-3.5 h-3.5"/>}
-                           </button>
-                           {/* MODIFIED: Added reset timer button */}
-                           <button
+                            >
+                                {isTimerOn ? <Pause className="w-3.5 h-3.5"/> : <Play className="w-3.5 h-3.5"/>}
+                            </button>
+                            {/* MODIFIED: Added reset timer button */}
+                            <button
                               onClick={handleResetTimer}
                               disabled={submitted || !isAuthenticated || timeElapsed === 0}
                               className="ml-0.5 p-1 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
                               title={!isAuthenticated ? "Login to reset timer" : "Reset timer"}
-                           >
-                               <RotateCcw className="w-3.5 h-3.5" />
-                           </button>
-                      </div>
-                      
-                      {/* MODIFIED: Favorite (Bookmark) Button */}
-                       <button
-                          onClick={handleToggleFavorite}
-                          disabled={!isAuthenticated}
-                          className={`flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg transition-colors border whitespace-nowrap ${
-                              isFavorite
-                              ? 'bg-yellow-100 text-yellow-800 border-yellow-200 dark:bg-yellow-900/50 dark:text-yellow-300 dark:border-yellow-700'
-                              : 'bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700 hover:bg-gray-200 dark:hover:bg-gray-700'
-                          } disabled:opacity-50 disabled:cursor-not-allowed`}
-                          title={!isAuthenticated ? "Login to add to Favorites" : (isFavorite ? "Remove from Favorites" : "Add to Favorites")}
-                       >
-                           <Bookmark className={`w-3.5 h-3.5 ${isFavorite ? 'fill-current' : ''}`}/>
-                           {isFavorite ? 'Favorited' : 'Favorite'}
-                       </button>
+                            >
+                                <RotateCcw className="w-3.5 h-3.5" />
+                            </button>
+                        </div>
+                        
+                        {/* MODIFIED: Favorite (Bookmark) Button */}
+                          <button
+                            onClick={handleToggleFavorite}
+                            disabled={!isAuthenticated}
+                            className={`flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg transition-colors border whitespace-nowrap ${
+                                isFavorite
+                                ? 'bg-yellow-100 text-yellow-800 border-yellow-200 dark:bg-yellow-900/50 dark:text-yellow-300 dark:border-yellow-700'
+                                : 'bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700 hover:bg-gray-200 dark:hover:bg-gray-700'
+                            } disabled:opacity-50 disabled:cursor-not-allowed`}
+                            title={!isAuthenticated ? "Login to add to Favorites" : (isFavorite ? "Remove from Favorites" : "Add to Favorites")}
+                          >
+                              <Bookmark className={`w-3.5 h-3.5 ${isFavorite ? 'fill-current' : ''}`}/>
+                              {isFavorite ? 'Favorited' : 'Favorite'}
+                          </button>
 
-                      {/* NEW: Save to List Button */}
-                       <button
-                          onClick={() => setShowListModal(true)}
-                          disabled={!isAuthenticated}
-                          className="flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg transition-colors border bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700 hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                          title={!isAuthenticated ? "Login to save to lists" : "Save to list"}
-                       >
-                           <ListPlus className="w-3.5 h-3.5" />
-                           Save
-                       </button>
+                        {/* NEW: Save to List Button */}
+                          <button
+                            onClick={() => setShowListModal(true)}
+                            disabled={!isAuthenticated}
+                            className="flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg transition-colors border bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700 hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                            title={!isAuthenticated ? "Login to save to lists" : "Save to list"}
+                          >
+                              <ListPlus className="w-3.5 h-3.5" />
+                              Save
+                          </button>
 
-                   </div>
-               </div>
+                    </div>
+                </div>
               <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-gray-600 dark:text-gray-400">
-                <span className={`px-2 py-0.5 rounded-full font-medium ${getDifficultyColor(question.difficulty)}`}>{question.difficulty}</span>
+                {/* MODIFIED: Removed Difficulty span */}
                 <span className="flex items-center gap-1"><BookOpen className="w-3.5 h-3.5" /> {question.subject}</span>
                 <span className="flex items-center gap-1"><Bookmark className="w-3.5 h-3.5" /> {question.topic}</span>
                 <span className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5" /> GATE {question.year}</span>
@@ -802,13 +910,13 @@ export function QuestionDetail() {
                       if (isAuthenticated) optionClasses += ' hover:border-blue-400 dark:hover:border-blue-600 cursor-pointer';
                       else optionClasses += ' cursor-default opacity-75';
                     } else {
-                       optionClasses += ' cursor-default ';
+                        optionClasses += ' cursor-default ';
                       if (isCorrectOption) {
                         optionClasses += 'border-green-500 bg-green-50 dark:bg-green-900/30';
                         stateIndicator = <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0 mt-1" />;
                       } else if (isSelected && !isCorrectOption) {
                         optionClasses += 'border-red-500 bg-red-50 dark:bg-red-900/30';
-                         stateIndicator = <XCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-1" />;
+                          stateIndicator = <XCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-1" />;
                       } else {
                         optionClasses += 'border-gray-200 dark:border-gray-700 opacity-60';
                       }
@@ -816,8 +924,8 @@ export function QuestionDetail() {
                     return (
                       <button key={option.label} ref={el => optionsRef.current[index] = el} onClick={() => handleMsqToggle(option.label)} disabled={submitted || !isAuthenticated} className={optionClasses} title={!isAuthenticated ? "Login to select an option" : ""}>
                           <span className={`flex-shrink-0 w-7 h-7 rounded-md border-2 flex items-center justify-center font-semibold text-sm mt-0.5 ${ isSelected && !submitted ? 'bg-blue-500 border-blue-500 text-white' : submitted && isCorrectOption ? 'bg-green-500 border-green-500 text-white' : submitted && isSelected && !isCorrectOption ? 'bg-red-500 border-red-500 text-white' : 'bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300' }`}>
-                            {/* Show checkmark if selected, otherwise label */}
-                            {isSelected ? <CheckIcon className="w-4 h-4" /> : option.label}
+                              {/* Show checkmark if selected, otherwise label */}
+                              {isSelected ? <CheckIcon className="w-4 h-4" /> : option.label}
                           </span>
                           <span className="flex-1 text-gray-900 dark:text-white prose dark:prose-invert prose-sm" dangerouslySetInnerHTML={{ __html: cleanedOptionHtml }} />
                           {stateIndicator}
@@ -839,13 +947,13 @@ export function QuestionDetail() {
                       if (isAuthenticated) optionClasses += ' hover:border-blue-400 dark:hover:border-blue-600 cursor-pointer';
                       else optionClasses += ' cursor-default opacity-75';
                     } else {
-                       optionClasses += ' cursor-default ';
+                        optionClasses += ' cursor-default ';
                       if (isCorrectOption) {
                         optionClasses += 'border-green-500 bg-green-50 dark:bg-green-900/30';
                         stateIndicator = <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0 mt-1" />;
                       } else if (isSelected && !isCorrectOption) {
                         optionClasses += 'border-red-500 bg-red-50 dark:bg-red-900/30';
-                         stateIndicator = <XCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-1" />;
+                          stateIndicator = <XCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-1" />;
                       } else {
                         optionClasses += 'border-gray-200 dark:border-gray-700 opacity-60';
                       }
@@ -877,16 +985,18 @@ export function QuestionDetail() {
               {submitted && (
                 <div className="space-y-4">
                   <div className={`p-4 rounded-lg border ${isCorrect ? 'bg-green-50 dark:bg-green-950/50 border-green-200 dark:border-green-800' : 'bg-red-50 dark:bg-red-950/50 border-red-200 dark:border-red-800'}`}>
-                     <div className="flex items-center gap-3">
-                      {isCorrect ? <CheckCircle className="w-6 h-6 text-green-600" /> : <XCircle className="w-6 h-6 text-red-600" />}
-                      <span className={`font-semibold ${isCorrect ? 'text-green-800 dark:text-green-200' : 'text-red-800 dark:text-red-200'}`}>
-                        {isCorrect ? 'Correct!' : 'Incorrect.'}
-                        {/* MODIFIED: Show correct answer label(s) */}
-                        {question.question_type === 'nat' && !isCorrect && ` The correct answer is ${question.nat_answer}.`}
-                        {question.question_type === 'mcq' && !isCorrect && ` Correct option was ${question.options.find(o => o.is_correct)?.label}.`}
-                        {question.question_type === 'msq' && !isCorrect && ` Correct options were ${question.options.filter(o => o.is_correct).map(o => o.label).join(', ')}.`}
-                      </span>
-                    </div>
+                      <div className="flex items-center gap-3">
+                        {isCorrect ? <CheckCircle className="w-6 h-6 text-green-600" /> : <XCircle className="w-6 h-6 text-red-600" />}
+                        <span className={`font-semibold ${isCorrect ? 'text-green-800 dark:text-green-200' : 'text-red-800 dark:text-red-200'}`}>
+                          {isCorrect ? 'Correct!' : 'Incorrect.'}
+                          {/* MODIFIED: Show correct answer label(s) */}
+                          {/* --- FIX: Show correct NAT range --- */}
+                          {question.question_type === 'nat' && !isCorrect && ` The correct answer is between ${question.nat_answer_min || 'N/A'} and ${question.nat_answer_max || 'N/A'}.`}
+                          {/* --- END FIX --- */}
+                          {question.question_type === 'mcq' && !isCorrect && ` Correct option was ${question.options.find(o => o.is_correct)?.label}.`}
+                          {question.question_type === 'msq' && !isCorrect && ` Correct options were ${question.options.filter(o => o.is_correct).map(o => o.label).join(', ')}.`}
+                        </span>
+                      </div>
                   </div>
                   {cleanedExplanationHtml && (
                     <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-6 border border-gray-200 dark:border-gray-700/50">
@@ -908,7 +1018,7 @@ export function QuestionDetail() {
                           {resetting ? <Loader2 className="w-5 h-5 animate-spin" /> : <RefreshCcw className="w-5 h-5" />}
                           Try Again
                       </button>
-                     <button onClick={handleNext} disabled={!findNextQuestionId()} className="flex-1 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors flex items-center justify-center gap-2 disabled:bg-gray-400 dark:disabled:bg-gray-700 disabled:cursor-not-allowed">
+                    <button onClick={handleNext} disabled={!findNextQuestionId()} className="flex-1 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors flex items-center justify-center gap-2 disabled:bg-gray-400 dark:disabled:bg-gray-700 disabled:cursor-not-allowed">
                           Next Question <ArrowRight className="w-5 h-5" />
                       </button>
                   </div>
@@ -916,15 +1026,15 @@ export function QuestionDetail() {
               )}
             </div>
 
-             {/* Notes Section */}
-             <div className="p-6 border-t border-gray-200 dark:border-gray-800">
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">My Notes</h3>
-                  <textarea value={note} onChange={(e) => setNote(e.target.value)} disabled={!isAuthenticated} placeholder={isAuthenticated ? "Write a short note for this question..." : "Login to save notes."} className="w-full p-3 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-white min-h-[100px] disabled:bg-gray-100 dark:disabled:bg-gray-800 disabled:cursor-not-allowed"/>
-                  <button onClick={handleSaveNote} disabled={!isAuthenticated || savingNote} className="mt-3 w-full sm:w-auto px-6 py-2 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 disabled:bg-gray-400 dark:disabled:bg-gray-500 disabled:cursor-not-allowed flex items-center justify-center gap-2">
-                      {savingNote ? <Loader2 className="w-5 h-5 animate-spin"/> : <Save className="w-5 h-5" />}
-                      Save Note
-                  </button>
-              </div>
+            {/* Notes Section */}
+            <div className="p-6 border-t border-gray-200 dark:border-gray-800">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">My Notes</h3>
+                <textarea value={note} onChange={(e) => setNote(e.target.value)} disabled={!isAuthenticated} placeholder={isAuthenticated ? "Write a short note for this question..." : "Login to save notes."} className="w-full p-3 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-white min-h-[100px] disabled:bg-gray-100 dark:disabled:bg-gray-800 disabled:cursor-not-allowed"/>
+                <button onClick={handleSaveNote} disabled={!isAuthenticated || savingNote} className="mt-3 w-full sm:w-auto px-6 py-2 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 disabled:bg-gray-400 dark:disabled:bg-gray-500 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+                    {savingNote ? <Loader2 className="w-5 h-5 animate-spin"/> : <Save className="w-5 h-5" />}
+                    Save Note
+                </button>
+            </div>
           </div>
         </div>
       </div>

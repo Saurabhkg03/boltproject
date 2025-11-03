@@ -1,7 +1,9 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { db } from '../firebase'; // Assuming firebase setup is correct
-import { collection, getDocs } from 'firebase/firestore';
-import { Question } from '../data/mockData'; // Assuming types are correct
+// *** REMOVED: No longer need direct db access or full collection reads ***
+// import { db } from '../firebase'; 
+// import { collection, getDocs } from 'firebase/firestore';
+// import { Question } from '../data/mockData';
+import { useMetadata } from './MetadataContext'; // *** ADDED: Import metadata hook ***
 
 interface DailyChallengeContextType {
   dailyChallengeId: string | null;
@@ -12,47 +14,55 @@ const DailyChallengeContext = createContext<DailyChallengeContextType | undefine
 
 export function DailyChallengeProvider({ children }: { children: ReactNode }) {
   const [dailyChallengeId, setDailyChallengeId] = useState<string | null>(null);
+  
+  // *** ADDED: Get metadata from our optimized context ***
+  const { metadata, loading: metadataLoading } = useMetadata();
+  
+  // *** MODIFIED: loadingChallenge now depends on metadataLoading ***
   const [loadingChallenge, setLoadingChallenge] = useState(true);
 
+  // *** MODIFIED: This effect now reads from metadata, not Firestore ***
   useEffect(() => {
-    const fetchDailyChallenge = async () => {
+    // Wait until metadata is loaded before trying to calculate
+    if (metadataLoading || !metadata) {
+      console.log("[DailyChallenge] Waiting for metadata...");
       setLoadingChallenge(true);
-      try {
-        // Fetch all questions - needed for the day-of-year calculation consistency
-        const questionsSnapshot = await getDocs(collection(db, 'questions'));
-        // Map to include IDs and sort consistently by title (numeric part)
-        const questionsData = questionsSnapshot.docs
-          .map(doc => ({ id: doc.id, ...doc.data() } as Question))
-          .sort((a, b) => {
-            const numA = parseInt((a.title || '0').replace(/\D/g,''), 10); // Extract number from title
-            const numB = parseInt((b.title || '0').replace(/\D/g,''), 10); // Extract number from title
-            return numA - numB;
-          });
+      return;
+    }
 
-        if (questionsData.length > 0) {
-          // Calculate the day of the year (1-366)
-          const now = new Date();
-          const start = new Date(now.getFullYear(), 0, 0);
-          const diff = (now.getTime() - start.getTime()) + ((start.getTimezoneOffset() - now.getTimezoneOffset()) * 60 * 1000);
-          const oneDay = 1000 * 60 * 60 * 24;
-          const dayOfYear = Math.floor(diff / oneDay);
-          
-          // Use modulo to get a consistent index based on the day
-          const challengeIndex = (dayOfYear - 1) % questionsData.length; // Use dayOfYear - 1 for 0-based index
-          setDailyChallengeId(questionsData[challengeIndex].id);
-        } else {
-          setDailyChallengeId(null);
-        }
-      } catch (error) {
-        console.error("Error fetching daily challenge:", error);
+    console.log("[DailyChallenge] Metadata loaded. Calculating challenge...");
+    setLoadingChallenge(true);
+    
+    try {
+      // *** REMOVED: All Firestore getDocs() logic ***
+
+      // *** ADDED: Get the sorted ID list directly from metadata ***
+      const questionIds = metadata.allQuestionIds || [];
+
+      if (questionIds.length > 0) {
+        // Calculate the day of the year (1-366)
+        const now = new Date();
+        const start = new Date(now.getFullYear(), 0, 0);
+        const diff = (now.getTime() - start.getTime()) + ((start.getTimezoneOffset() - now.getTimezoneOffset()) * 60 * 1000);
+        const oneDay = 1000 * 60 * 60 * 24;
+        const dayOfYear = Math.floor(diff / oneDay);
+        
+        // Use modulo to get a consistent index based on the day
+        const challengeIndex = (dayOfYear - 1) % questionIds.length; // Use dayOfYear - 1 for 0-based index
+        
+        console.log(`[DailyChallenge] Day ${dayOfYear}, Index ${challengeIndex}, ID: ${questionIds[challengeIndex]}`);
+        setDailyChallengeId(questionIds[challengeIndex]);
+      } else {
+        console.warn("[DailyChallenge] Metadata loaded, but 'allQuestionIds' array is empty.");
         setDailyChallengeId(null);
-      } finally {
-        setLoadingChallenge(false);
       }
-    };
-
-    fetchDailyChallenge();
-  }, []); // Run only once on mount
+    } catch (error) {
+      console.error("[DailyChallenge] Error calculating daily challenge:", error);
+      setDailyChallengeId(null);
+    } finally {
+      setLoadingChallenge(false);
+    }
+  }, [metadata, metadataLoading]); // *** MODIFIED: Runs when metadata is ready ***
 
   return (
     <DailyChallengeContext.Provider value={{ dailyChallengeId, loadingChallenge }}>

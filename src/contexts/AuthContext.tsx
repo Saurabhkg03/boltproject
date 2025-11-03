@@ -8,14 +8,15 @@ import {
   signInWithPopup,
   User as FirebaseUser,
   deleteUser,
-  sendEmailVerification, // Import sendEmailVerification
-  updateProfile,         // Import updateProfile
-  sendPasswordResetEmail // Import sendPasswordResetEmail
+  sendEmailVerification,
+  updateProfile,
+  sendPasswordResetEmail
 } from 'firebase/auth';
-import { doc, setDoc, getDoc, collection, query, where, getDocs, deleteDoc, orderBy, writeBatch } from 'firebase/firestore'; // Added writeBatch
-// Attempting to fix import path by removing extension
+// MODIFIED: Added onSnapshot and limit
+import { doc, setDoc, getDoc, collection, query, where, getDocs, deleteDoc, writeBatch, onSnapshot, limit } from 'firebase/firestore'; 
 import { auth, db } from '../firebase';
-import { User, Submission, UserQuestionData } from '../data/mockData';
+// MODIFIED: Removed Submission, UserQuestionData as they are no longer needed here
+import { User } from '../data/mockData'; 
 
 interface AuthContextType {
   user: FirebaseUser | null;
@@ -24,12 +25,13 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<void>;
   signup: (name: string, username: string, email: string, password: string) => Promise<void>;
   loginWithGoogle: () => Promise<void>;
-  resetPassword: (email: string) => Promise<void>; // Added resetPassword
+  resetPassword: (email: string) => Promise<void>;
   logout: () => void;
   deleteAccount: () => Promise<void>;
   isAuthenticated: boolean;
   loading: boolean;
-  streak: number;
+  // MODIFIED: Removed streak, as it's now part of userInfo.streakData
+  // streak: number; 
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -38,113 +40,120 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [userInfo, setUserInfo] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const [streak, setStreak] = useState(0);
+  // MODIFIED: Removed streak state
+  // const [streak, setStreak] = useState(0); 
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+    // This outer unsubscribe is for onAuthStateChanged
+    const unsubscribeAuth = onAuthStateChanged(auth, async (currentUser) => {
         console.log("Auth State Changed:", currentUser ? `UID: ${currentUser.uid}, Verified: ${currentUser.emailVerified}` : 'No User');
         setUser(currentUser);
+
+        // This inner unsubscribe is for onSnapshot
+        let unsubscribeSnapshot: () => void = () => {};
+
         if (currentUser) {
-            // Check if email verified OR if it's a Google Sign-in
             const isGoogleProvider = currentUser.providerData.some(provider => provider.providerId === GoogleAuthProvider.PROVIDER_ID);
+            
             if (currentUser.emailVerified || isGoogleProvider) {
                 try {
                     const userDocRef = doc(db, 'users', currentUser.uid);
-                    const userDocSnap = await getDoc(userDocRef);
-                    if (userDocSnap.exists()) {
-                        console.log("User data found in Firestore:", userDocSnap.data());
-                        setUserInfo(userDocSnap.data() as User);
-                    } else if (isGoogleProvider) {
-                         // Handle case where Google user exists in Auth but not Firestore (might happen on first login with existing Auth account)
-                        console.log("Google user exists in Auth but not Firestore. Creating Firestore doc.");
-                        const newUser: User = {
-                            uid: currentUser.uid,
-                            name: currentUser.displayName || 'New User',
-                            username: `user_${currentUser.uid.slice(-6)}`, // Temporary username
-                            email: currentUser.email || '',
-                            joined: new Date().toISOString(),
-                            stats: { attempted: 0, correct: 0, accuracy: 0 },
-                            avatar: currentUser.photoURL || '/user.png',
-                            role: 'user',
-                            needsSetup: !currentUser.displayName // Needs setup if no display name from Google
-                        };
-                         await setDoc(userDocRef, newUser);
-                         setUserInfo(newUser);
-                    } else {
-                        console.log("User exists in Auth but not Firestore and is not Google provider. UserInfo not set.");
-                        setUserInfo(null); // Explicitly set to null if Firestore doc doesn't exist for non-Google users
-                    }
+
+                    // --- MODIFICATION: Use onSnapshot for real-time updates ---
+                    // This one listener will power the entire app (Navbar, Profile, etc.)
+                    // with real-time stats updated by our (simulated) Cloud Function.
+                    unsubscribeSnapshot = onSnapshot(userDocRef, (userDocSnap) => {
+                        if (userDocSnap.exists()) {
+                            console.log("Real-time user data received:", userDocSnap.data());
+                            const userData = userDocSnap.data() as User;
+                            
+                            // Ensure data is valid before setting
+                            if (!userData.stats) { userData.stats = { attempted: 0, correct: 0, accuracy: 0, subjects: {} }; }
+                            if (!userData.streakData) { userData.streakData = { currentStreak: 0, lastSubmissionDate: '' }; }
+                            if (!userData.activityCalendar) { userData.activityCalendar = {}; }
+
+                            setUserInfo(userData);
+
+                        } else if (isGoogleProvider) {
+                            // This logic only runs if onSnapshot returns no doc AND it's a Google user.
+                            // This is a one-time setup for a new Google user.
+                            console.log("Google user exists in Auth but not Firestore. Creating Firestore doc.");
+                            
+                            // This is an async operation, but it's fine as it only runs once.
+                            // We do this inside the snapshot callback to avoid a race condition.
+                            (async () => {
+                                // We can't use the 'loginWithGoogle' logic here as it causes a loop.
+                                // We'll just create the user doc.
+                                let usernameToSet = currentUser.email ? currentUser.email.split('@')[0].toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 15) : `user_${currentUser.uid.slice(-6)}`;
+                                if (usernameToSet.length < 3) usernameToSet = `user_${currentUser.uid.slice(-6)}`;
+                                
+                                // Simple check for username, not as robust as signup, but necessary.
+                                const q = query(collection(db, 'users'), where('username', '==', usernameToSet), limit(1));
+                                const querySnapshot = await getDocs(q);
+                                if (!querySnapshot.empty) {
+                                    usernameToSet = `user_${currentUser.uid.slice(-6)}`;
+                                }
+
+                                const newUser: User = {
+                                    uid: currentUser.uid,
+                                    name: currentUser.displayName || 'New User',
+                                    username: usernameToSet, 
+                                    email: currentUser.email || '',
+                                    joined: new Date().toISOString(),
+                                    stats: { attempted: 0, correct: 0, accuracy: 0, subjects: {} },
+                                    streakData: { currentStreak: 0, lastSubmissionDate: '' },
+                                    activityCalendar: {},
+                                    avatar: currentUser.photoURL || '/user.png',
+                                    role: 'user',
+                                    needsSetup: !currentUser.displayName
+                                };
+                                await setDoc(userDocRef, newUser);
+                                setUserInfo(newUser); // Set the new user in state
+                            })();
+                        } else {
+                            console.log("User exists in Auth but not Firestore and is not Google provider. UserInfo not set.");
+                            setUserInfo(null); 
+                        }
+                        setLoading(false); // Set loading to false *after* snapshot resolves
+                    }, (error) => {
+                        console.error("Error in onSnapshot listener:", error);
+                        setUserInfo(null);
+                        setLoading(false);
+                    });
+                    // --- END MODIFICATION ---
+
                 } catch (error) {
-                    console.error("Error fetching user data from Firestore:", error);
-                    setUserInfo(null); // Clear userInfo on error
+                    console.error("Error setting up user listener:", error);
+                    setUserInfo(null); 
+                    setLoading(false);
                 }
             } else {
-                 console.log("User email not verified. UserInfo not set.");
-                 setUserInfo(null); // Clear userInfo if email is not verified (for email/password users)
+                console.log("User email not verified. UserInfo not set.");
+                setUserInfo(null); // Clear userInfo if email is not verified
+                setLoading(false);
             }
         } else {
             setUserInfo(null); // Clear userInfo if no user
+            setLoading(false);
         }
-        setLoading(false);
+
+        // Return the snapshot unsubscriber
+        return () => {
+            console.log("[AuthContext] Unsubscribing from user snapshot.");
+            unsubscribeSnapshot();
+        };
     });
-    return unsubscribe;
+
+    // Return the auth state unsubscriber
+    return () => {
+        console.log("[AuthContext] Unsubscribing from auth state changes.");
+        unsubscribeAuth();
+    };
   }, []); // Run only once on mount
 
-   useEffect(() => {
-    const calculateStreak = async () => {
-      // Calculate streak only if we have a valid user and userInfo
-      if (user && userInfo) {
-        try {
-          // ... (streak calculation logic remains the same) ...
-          const submissionsQuery = query(
-            collection(db, `users/${user.uid}/submissions`),
-            orderBy('timestamp', 'desc')
-          );
-          const submissionsSnapshot = await getDocs(submissionsQuery);
-          const submissionsData = submissionsSnapshot.docs.map(doc => doc.data() as Submission);
-
-          let currentStreak = 0;
-          if (submissionsData.length > 0) {
-              const submissionDates = [...new Set(submissionsData.map(s => new Date(s.timestamp).toDateString()))]
-                  .map(dateStr => new Date(dateStr))
-                  .filter(d => !isNaN(d.getTime())) // Filter invalid dates
-                  .sort((a, b) => b.getTime() - a.getTime()); // Sort most recent first
-
-              if (submissionDates.length > 0) {
-                  const today = new Date(); today.setHours(0,0,0,0);
-                  const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
-
-                  const isToday = submissionDates[0].getTime() === today.getTime();
-                  const isYesterday = submissionDates[0].getTime() === yesterday.getTime();
-
-                  if (isToday || isYesterday) {
-                      currentStreak = 1;
-                      for (let i = 0; i < submissionDates.length - 1; i++) {
-                          const diff = (submissionDates[i].getTime() - submissionDates[i+1].getTime()) / (1000 * 3600 * 24);
-                          if (diff === 1) { // Check for exactly 1 day difference
-                              currentStreak++;
-                          } else if (diff > 1) { // Break if gap is larger than 1 day
-                              break;
-                          }
-                          // Ignore if diff <= 0 (same day submissions)
-                      }
-                  }
-              }
-          }
-          console.log("Calculated Streak:", currentStreak);
-          setStreak(currentStreak);
-        } catch (error) {
-          console.error("Failed to calculate streak:", error);
-          setStreak(0);
-        }
-      } else {
-        setStreak(0); // Reset streak if no user or userInfo
-      }
-    };
-
-    calculateStreak();
-  }, [user, userInfo]); // Depend on both user and userInfo
-
+  // --- MODIFIED: REMOVED the entire useEffect for calculateStreak ---
+  // This is no longer needed. The streak is provided in real-time
+  // by the onSnapshot listener above.
 
   const login = async (email: string, password: string) => {
     const userCredential = await signInWithEmailAndPassword(auth, email, password);
@@ -155,8 +164,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.log("Login attempt failed: Email not verified.");
         throw new Error('auth/email-not-verified'); // Throw specific error message
     }
-     console.log("Login successful, email verified.");
-     // No need to set user/userInfo here, onAuthStateChanged handles it
+    console.log("Login successful, email verified.");
+    // No need to set user/userInfo here, onAuthStateChanged handles it
   };
 
   const signup = async (name: string, username: string, email: string, password: string) => {
@@ -176,36 +185,44 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
     console.log("User created in Auth:", userCredential.user.uid);
 
-     // --- Send verification email ---
+    // --- Send verification email ---
     try {
         await sendEmailVerification(userCredential.user);
         console.log("Verification email sent to:", email);
     } catch (verificationError) {
-         console.error("Error sending verification email:", verificationError);
-         // Decide how to handle this - maybe delete the user or just inform them?
-         // For now, let's proceed but maybe add a flag to the user doc later
-         // Consider deleting the auth user if verification email fails critically
-         // await deleteUser(userCredential.user); // Uncomment carefully
-         // throw new Error("Could not send verification email. Please try signing up again.");
+        console.error("Error sending verification email:", verificationError);
+        // This is a critical failure, we should probably delete the auth user
+        try {
+            await deleteUser(userCredential.user);
+            console.log("Auth user deleted due to verification email failure.");
+        } catch (deleteError) {
+            console.error("Failed to delete auth user after verification error:", deleteError);
+        }
+        throw new Error("Could not send verification email. Please check the email address and try signing up again.");
     }
 
     // --- Update Auth profile (Display Name) ---
-     try {
-         await updateProfile(userCredential.user, { displayName: name });
-         console.log("Auth profile display name updated.");
-     } catch (profileError) {
-         console.error("Error updating Auth profile display name:", profileError);
-         // Non-critical, proceed but log error
-     }
+    try {
+        await updateProfile(userCredential.user, { displayName: name });
+        console.log("Auth profile display name updated.");
+    } catch (profileError) {
+        console.error("Error updating Auth profile display name:", profileError);
+        // Non-critical, proceed but log error
+    }
 
     // --- Create user document in Firestore ---
+    // This is the "initial" document. The migration script/cloud function
+    // will fill in the rest of the data.
     const newUser: User = {
       uid: userCredential.user.uid,
       name,
       username: saneUsername,
       email: email,
       joined: new Date().toISOString(),
-      stats: { attempted: 0, correct: 0, accuracy: 0 },
+      // Initialize all stats objects
+      stats: { attempted: 0, correct: 0, accuracy: 0, subjects: {} },
+      streakData: { currentStreak: 0, lastSubmissionDate: '' },
+      activityCalendar: {},
       avatar: userCredential.user.photoURL || '/user.png',
       role: 'user',
       needsSetup: false, // Set to false as name/username are provided
@@ -237,7 +254,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!userDocSnap.exists()) {
         console.log("Google Sign-in: First time user. Creating Firestore doc.");
         let usernameToSet = googleUser.email ? googleUser.email.split('@')[0].toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 15) : `user_${googleUser.uid.slice(-6)}`;
-        if (usernameToSet.length < 3) usernameToSet = `user_${googleUser.uid.slice(-6)}`; // Ensure min length
+        if (usernameToSet.length < 3) usernameToSet = `user_${googleUser.uid.slice(-6)}`;
 
         // Check if generated username exists
         let usernameExists = true;
@@ -262,7 +279,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             username: finalUsername, // Use the unique username
             email: googleUser.email || '',
             joined: new Date().toISOString(),
-            stats: { attempted: 0, correct: 0, accuracy: 0 },
+            // Initialize all stats objects
+            stats: { attempted: 0, correct: 0, accuracy: 0, subjects: {} },
+            streakData: { currentStreak: 0, lastSubmissionDate: '' },
+            activityCalendar: {},
             avatar: googleUser.photoURL || '/user.png',
             role: 'user',
             needsSetup: !googleUser.displayName // Needs setup if no display name from Google
@@ -274,7 +294,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.log("Google Sign-in: Existing user. Firestore doc exists.");
         // setUserInfo(userDocSnap.data() as User); // Let onAuthStateChanged handle this
     }
-     // No need to navigate here, onAuthStateChanged will trigger update and AppContent handles redirect if needed
+    // No need to navigate here, onAuthStateChanged will trigger update and AppContent handles redirect if needed
   };
 
   const logout = () => {
@@ -319,6 +339,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // 1. Delete Firestore subcollections first
         await deleteCollection(`users/${currentUser.uid}/submissions`);
         await deleteCollection(`users/${currentUser.uid}/userQuestionData`);
+        await deleteCollection(`users/${currentUser.uid}/questionLists`); // Also delete question lists
 
         // 2. Delete main user document
         const userDocRef = doc(db, 'users', currentUser.uid);
@@ -332,7 +353,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Clear local state immediately
         setUserInfo(null);
         setUser(null);
-        setStreak(0);
+        // setStreak(0); // State removed
 
     } catch (error: any) {
         console.error("Error deleting account:", error);
@@ -356,7 +377,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // User is authenticated IF firebase auth user exists AND userInfo is loaded (implies verification for email/pass)
       isAuthenticated: !!user && !!userInfo,
       loading,
-      streak
+      // streak // REMOVED
     }}>
       {!loading && children}
     </AuthContext.Provider>

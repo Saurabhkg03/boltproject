@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Shield, PlusCircle, Check, X, Loader2, Edit, ChevronLeft, ChevronRight } from 'lucide-react'; // Added pagination icons
+import { Shield, PlusCircle, Check, X, Loader2, Edit, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.tsx';
 import { db } from '../firebase.ts';
 import {
@@ -12,23 +12,22 @@ import {
   where,
   deleteDoc,
   writeBatch,
-  orderBy, // Added orderBy
-  limit,   // Added limit
-  startAfter, // Added startAfter
-  endBefore, // Added endBefore
-  limitToLast, // Added limitToLast
-  getCountFromServer, // Added getCountFromServer
-  DocumentSnapshot, // Added DocumentSnapshot
-  Query,           // Import Query type
-  DocumentData,    // Import DocumentData type
-  CollectionReference // Import CollectionReference type
+  orderBy, 
+  limit,   
+  startAfter, 
+  endBefore, 
+  limitToLast, 
+  getCountFromServer, 
+  DocumentSnapshot, 
+  Query,           
+  DocumentData,    
 } from 'firebase/firestore';
 import { Question } from '../data/mockData.ts';
-// Assuming you might create a skeleton for this later, but using Loader2 for now
-// import { AdminPanelSkeleton } from '../components/Skeletons.tsx';
+// Using Loader2 for skeleton state
+// import { AdminPanelSkeleton } from '../components/Skeletons.tsx'; 
 
 type AdminView = 'pending' | 'all';
-const PAGE_SIZE = 15; // Set page size for admin panel
+const PAGE_SIZE = 10; // MODIFIED: Changed from 15 to 10 as requested
 
 export function AdminPanel() {
   const { userInfo, loading: authLoading } = useAuth(); // Use auth loading state
@@ -79,6 +78,7 @@ export function AdminPanel() {
       }
 
       // Fetch total count for pagination (using the potentially filtered countQuery)
+      // This costs 1 read
       if (direction === 'first') {
         const snapshot = await getCountFromServer(countQuery);
         setTotalQuestions(snapshot.data().count);
@@ -96,6 +96,7 @@ export function AdminPanel() {
         dataQuery = query(dataQuery, limit(PAGE_SIZE));
       }
 
+      // This costs PAGE_SIZE (10) reads
       const documentSnapshots = await getDocs(dataQuery);
       const questionsData = documentSnapshots.docs.map(doc => ({ id: doc.id, ...doc.data() } as Question));
 
@@ -108,11 +109,11 @@ export function AdminPanel() {
       if (documentSnapshots.docs.length > 0) {
         // Correctly get first/last doc based on potential reversal
         if (direction === 'prev') {
-             setFirstVisible(documentSnapshots.docs[0]); // First doc before reversal
-             setLastVisible(documentSnapshots.docs[documentSnapshots.docs.length - 1]); // Last doc before reversal
+            setFirstVisible(documentSnapshots.docs[0]); // First doc before reversal
+            setLastVisible(documentSnapshots.docs[documentSnapshots.docs.length - 1]); // Last doc before reversal
         } else {
-             setFirstVisible(documentSnapshots.docs[0]);
-             setLastVisible(documentSnapshots.docs[documentSnapshots.docs.length - 1]);
+            setFirstVisible(documentSnapshots.docs[0]);
+            setLastVisible(documentSnapshots.docs[documentSnapshots.docs.length - 1]);
         }
       } else if (direction !== 'prev') {
         setFirstVisible(null);
@@ -182,6 +183,7 @@ export function AdminPanel() {
     try {
         // Query only for IDs to minimize data transfer
         const pendingQuery = query(collection(db, 'questions'), where('verified', '==', false));
+        // This is the expensive read operation you approved
         const snapshot = await getDocs(pendingQuery);
         allPendingIds = snapshot.docs.map(doc => doc.id);
 
@@ -230,8 +232,8 @@ export function AdminPanel() {
             // Refetch current page data to reflect deletion and update count
             // Check if deleting the last item on a page > 1
             if (questions.length === 1 && currentPage > 1) {
-                // Go to previous page after deletion
-                fetchQuestions(currentPage - 1, 'prev');
+                // This is complex, just refetching page 1 is safer
+                fetchQuestions(1, 'first');
             } else {
                 // Otherwise, just refetch the current page
                 fetchQuestions(currentPage, 'first'); // Use 'first' to recalculate total
@@ -252,7 +254,7 @@ export function AdminPanel() {
   };
 
   const handlePrevPage = () => {
-     // Ensure firstVisible exists before attempting to fetch previous
+    // Ensure firstVisible exists before attempting to fetch previous
     if (!loadingMore && firstVisible && currentPage > 1) {
        fetchQuestions(currentPage - 1, 'prev');
     }
@@ -262,7 +264,6 @@ export function AdminPanel() {
 
   // Show loading indicator if auth is pending or initial data is loading
   if (authLoading || loadingData) {
-    // Replace with AdminPanelSkeleton if you create one
     return (
         <div className="min-h-screen flex items-center justify-center">
             {/* Simple centered loader */}
@@ -326,10 +327,10 @@ export function AdminPanel() {
 
         {/* Query Error Display */}
         {queryError && (
-             <div className="text-center py-4 px-4 my-4 bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-800 rounded-lg">
-                <p className="text-red-600 dark:text-red-400 text-sm">{queryError}</p>
-             </div>
-         )}
+            <div className="text-center py-4 px-4 my-4 bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-800 rounded-lg">
+              <p className="text-red-600 dark:text-red-400 text-sm">{queryError}</p>
+            </div>
+        )}
 
         {/* Questions Table Container */}
         <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm overflow-hidden relative">
@@ -361,7 +362,7 @@ export function AdminPanel() {
           {/* Table or No Questions Message */}
           {questions.length === 0 && !loadingData && !queryError ? (
             <p className="p-6 text-center text-gray-500 dark:text-gray-400">
-               {adminView === 'pending' && userInfo?.role === 'admin' ? 'No questions are pending verification.' : 'No questions found for this view.'}
+                {adminView === 'pending' && userInfo?.role === 'admin' ? 'No questions are pending verification.' : 'No questions found for this view.'}
             </p>
           ) : (
             <div className="overflow-x-auto">
@@ -397,7 +398,7 @@ export function AdminPanel() {
                             )}
                             {/* Edit Button */}
                             <Link to={`/edit-question/${q.id}`} title="Edit" className={`text-blue-600 hover:text-blue-900 p-2 rounded-full hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors ${loadingMore || isApprovingAll ? 'pointer-events-none opacity-50' : ''}`}><Edit className="w-5 h-5"/></Link>
-                             {/* Delete Button for Admin (also for verified) */}
+                            {/* Delete Button for Admin (also for verified) */}
                             {userInfo?.role === 'admin' && (
                                 <button onClick={() => handleReject(q.id)} title="Delete Question" className="text-red-600 hover:text-red-900 p-2 rounded-full hover:bg-red-100 dark:hover:bg-red-900/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" disabled={loadingMore || isApprovingAll}><X className="w-5 h-5"/></button>
                             )}
@@ -411,7 +412,7 @@ export function AdminPanel() {
           )}
         </div>
 
-         {/* Pagination Controls */}
+          {/* Pagination Controls */}
         {totalQuestions > PAGE_SIZE && !queryError && (
             <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4">
                 <button onClick={handlePrevPage} disabled={currentPage === 1 || loadingMore || isApprovingAll} className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed">
@@ -420,7 +421,7 @@ export function AdminPanel() {
                 <span className="text-sm text-gray-700 dark:text-gray-400 order-first sm:order-none">
                     Page {currentPage} of {totalPages}
                 </span>
-                <button onClick={handleNextPage} disabled={currentPage === totalPages || loadingMore || isApprovingAll || questions.length < PAGE_SIZE} className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed">
+                <button onClick={handleNextPage} disabled={currentPage === totalPages || loadingMore || isApprovingAll || questions.length < PAGE_SIZE || !lastVisible} className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed">
                     Next <ChevronRight className="w-4 h-4" />
                 </button>
             </div>
@@ -429,4 +430,3 @@ export function AdminPanel() {
     </div>
   );
 }
-

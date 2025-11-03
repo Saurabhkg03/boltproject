@@ -1,11 +1,13 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { Zap, ArrowRight, BookOpen, BarChart } from 'lucide-react'; // Changed Award to BarChart
+import { Zap, ArrowRight, BookOpen, BarChart } from 'lucide-react';
 // Corrected import paths to be relative
 import { useAuth } from '../contexts/AuthContext';
+import { useDailyChallenge } from '../contexts/DailyChallengeContext'; // Import the Daily Challenge hook
+import { useMetadata } from '../contexts/MetadataContext'; // Import the Metadata hook
 import { db } from '../firebase';
-import { collection, getDocs, query, limit, orderBy } from 'firebase/firestore';
-import { Question, User } from '../data/mockData'; // User interface includes 'rating'
+import { collection, getDocs, query, limit, orderBy, doc, getDoc } from 'firebase/firestore'; // <-- Import doc and getDoc
+import { User, Question } from '../data/mockData'; // <-- Re-added 'Question' type
 import { HomeSkeleton } from '../components/Skeletons'; // Import skeleton
 
 interface SubjectStats {
@@ -32,102 +34,104 @@ const getColorForString = (str: string): string => {
   return COLORS[index];
 };
 
-// --- RATING FUNCTION (copied from Leaderboard.tsx) ---
-const RATING_SCALING_FACTOR = 100;
-const calculateRating = (accuracy: number | undefined, correct: number | undefined): number => {
-    const safeAccuracy = accuracy ?? 0;
-    const safeCorrect = correct ?? 0;
-    const rating = Math.max(0, (safeAccuracy / 100) * Math.log10(safeCorrect + 1) * RATING_SCALING_FACTOR);
-    return parseFloat(rating.toFixed(2));
-};
+// --- RATING FUNCTION REMOVED ---
+// No longer needed, as rating is pre-calculated and read from the user document.
 
 export function Home() {
   const { userInfo, isAuthenticated, loading: authLoading } = useAuth(); // Use auth loading state
-  const [dailyChallenge, setDailyChallenge] = useState<Question | null>(null);
-  const [leaderboardPreview, setLeaderboardPreview] = useState<User[]>([]); // Renamed state
-  const [subjectStats, setSubjectStats] = useState<SubjectStats[]>([]);
-  const [loadingData, setLoadingData] = useState(true); // Separate loading state for page data
+  const { metadata, loading: metadataLoading } = useMetadata(); // Get metadata and loading state
+  const { dailyChallengeId, loadingChallenge } = useDailyChallenge(); // <-- Get ID and loading state
+  
+  const [dailyChallenge, setDailyChallenge] = useState<Question | null>(null); // <-- State for the full challenge object
+  const [leaderboardPreview, setLeaderboardPreview] = useState<User[]>([]);
+  const [loadingLeaderboard, setLoadingLeaderboard] = useState(true); // Separate loading state for leaderboard
 
+  // --- DERIVE SUBJECTS FROM METADATA ---
+  // This is now instant and costs 0 reads, as metadata is already loaded.
+  const subjectStats: SubjectStats[] = useMemo(() => { // <-- Added explicit type
+    if (!metadata?.subjectCounts) {
+      return [];
+    }
+    return Object.entries(metadata.subjectCounts)
+      .map(([name, count]) => ({
+        name,
+        count: count || 0, // Ensure count is a number
+        color: getColorForString(name),
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [metadata]);
+
+
+  // --- FETCH LEADERBOARD DATA ---
+  // This useEffect is now *only* responsible for fetching the leaderboard preview.
   useEffect(() => {
-    const fetchData = async () => {
-      setLoadingData(true); // Start data loading
+    const fetchLeaderboard = async () => {
+      setLoadingLeaderboard(true);
       try {
-        // Fetch questions for subjects and daily challenge
-        const questionsQuery = query(collection(db, 'questions'), orderBy('title')); // Consistent ordering
-        const questionsSnapshot = await getDocs(questionsQuery);
-        const questionsData = questionsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Question));
-
-        // Calculate Subject Stats
-        const subjectMap = questionsData.reduce((acc, q) => {
-          const subjectName = q.subject || 'Uncategorized';
-          acc[subjectName] = (acc[subjectName] || 0) + 1;
-          return acc;
-        }, {} as Record<string, number>);
-        const updatedSubjects = Object.entries(subjectMap)
-            .map(([name, count]) => ({
-                name,
-                count,
-                color: getColorForString(name),
-            }))
-            .sort((a, b) => a.name.localeCompare(b.name));
-        setSubjectStats(updatedSubjects);
-
-        // Determine Daily Challenge
-        if (questionsData.length > 0) {
-          const now = new Date();
-          const start = new Date(now.getFullYear(), 0, 0);
-          const diff = (now.getTime() - start.getTime()) + ((start.getTimezoneOffset() - now.getTimezoneOffset()) * 60 * 1000);
-          const oneDay = 1000 * 60 * 60 * 24;
-          const dayOfYear = Math.floor(diff / oneDay);
-          const challengeIndex = (dayOfYear - 1 + questionsData.length) % questionsData.length; // Ensure positive index
-          setDailyChallenge(questionsData[challengeIndex]);
-        }
-
-        // --- Fetch and Process Top Users for Leaderboard Preview ---
-        // Query ordered primarily by correct count
-        const usersQuery = query(collection(db, 'users'), orderBy('stats.correct', 'desc'), orderBy('stats.accuracy', 'desc'), limit(5));
+        // --- *** FIX: Query by 'rating' field *** ---
+        // This is now consistent with Leaderboard.tsx and is accurate.
+        const usersQuery = query(collection(db, 'users'), orderBy('rating', 'desc'), limit(5));
         const usersSnapshot = await getDocs(usersQuery);
+        
         const fetchedUsers = usersSnapshot.docs.map(doc => {
-             const data = doc.data() as User;
-             // Ensure stats exist
+            const data = doc.data() as User;
+            // Ensure stats and rating exist for display
             if (!data.stats) {
-                data.stats = { attempted: 0, correct: 0, accuracy: 0 };
-            } else {
-                 data.stats.attempted = data.stats.attempted ?? 0;
-                 data.stats.correct = data.stats.correct ?? 0;
-                 data.stats.accuracy = data.stats.accuracy ?? 0;
+                data.stats = { attempted: 0, correct: 0, accuracy: 0, subjects: {} };
+            }
+            if (data.rating === undefined) {
+                data.rating = 0;
             }
             return data;
         });
 
-        // Calculate rating for each fetched user
-        const usersWithRating = fetchedUsers.map(user => ({
-            ...user,
-            rating: calculateRating(user.stats?.accuracy, user.stats?.correct)
-        }));
+        // --- REMOVED: Client-side calculation and sorting ---
+        // The query is already sorted by rating.
 
-        // Re-sort client-side based on the calculated rating
-        usersWithRating.sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0));
-
-        // Set the top 5 (or fewer) based on the calculated rating
-        setLeaderboardPreview(usersWithRating.slice(0, 5));
+        setLeaderboardPreview(fetchedUsers); // Already the top 5
         // --- End Leaderboard Preview Update ---
 
       } catch (error) {
-        console.error("Error fetching home page data:", error);
-        setSubjectStats([]);
+        console.error("Error fetching leaderboard preview:", error);
         setLeaderboardPreview([]);
-        setDailyChallenge(null);
       } finally {
-        setLoadingData(false); // Finish data loading
+        setLoadingLeaderboard(false); // Finish data loading
       }
     };
 
-    fetchData();
+    fetchLeaderboard();
   }, []); // Run only once on mount
 
-  // Show skeleton if either auth is loading OR page data is loading
-  if (authLoading || loadingData) {
+  // --- FETCH DAILY CHALLENGE OBJECT ---
+  // This useEffect fetches the single daily challenge question *after* its ID is loaded.
+  useEffect(() => {
+    const fetchChallenge = async () => {
+      if (dailyChallengeId) {
+        try {
+          const docRef = doc(db, 'questions', dailyChallengeId);
+          const docSnap = await getDoc(docRef);
+          if (docSnap.exists()) {
+            setDailyChallenge({ id: docSnap.id, ...docSnap.data() } as Question);
+          } else {
+            console.warn("Daily challenge document not found:", dailyChallengeId);
+            setDailyChallenge(null);
+          }
+        } catch (error) {
+          console.error("Error fetching daily challenge object:", error);
+          setDailyChallenge(null);
+        }
+      } else {
+        setDailyChallenge(null); // No ID, so no challenge
+      }
+    };
+
+    if (!loadingChallenge) { // Only run once the challenge ID has been determined
+      fetchChallenge();
+    }
+  }, [dailyChallengeId, loadingChallenge]);
+
+  // Show skeleton if either auth, metadata, or challenge ID is loading
+  if (authLoading || metadataLoading || loadingChallenge) {
     return <HomeSkeleton />;
   }
 
@@ -147,16 +151,16 @@ export function Home() {
             <p className="text-lg text-slate-700 dark:text-slate-300">
               Welcome back, <span className="font-semibold text-blue-600 dark:text-blue-300">{userInfo.name}</span>!
             </p>
-            {/* Display Rating instead of Accuracy */}
+            {/* --- FIX: Use pre-calculated rating from userInfo --- */}
             <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-               Current Rating: <span className="font-semibold text-blue-600 dark:text-blue-400">{calculateRating(userInfo.stats.accuracy, userInfo.stats.correct)}</span>
+                Current Rating: <span className="font-semibold text-blue-600 dark:text-blue-400">{userInfo.rating ?? 0}</span>
             </p>
           </div>
         )}
       </div>
 
       {/* Daily Challenge Section */}
-      {isAuthenticated && dailyChallenge && (
+      {isAuthenticated && dailyChallenge && ( // <-- This 'dailyChallenge' now refers to our local state
         <div className="mb-16 glass-card p-6 md:p-8 border-blue-500/20">
           <div className="flex flex-col md:flex-row items-center gap-4 md:gap-8">
               <div className="flex-shrink-0 w-16 h-16 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-2xl flex items-center justify-center shadow-lg">
@@ -191,7 +195,7 @@ export function Home() {
               <Link
                 key={subject.name}
                 to="/practice"
-                state={{ subject: subject.name }}
+                state={{ subject: subject.name }} // Pass subject to Practice page
                 className={`glass-card p-6 transition-all duration-300 group ${
                   subject.count > 0
                     ? 'hover:shadow-xl hover:-translate-y-1'
@@ -217,12 +221,12 @@ export function Home() {
                 </div>
               </Link>
             ))}
-             {/* Placeholder if no subjects */}
-             {subjectStats.length === 0 && !loadingData && (
-                <p className="md:col-span-2 text-center text-slate-500 dark:text-slate-400 py-6">
-                    No subjects found. Add questions in the admin panel.
-                </p>
-             )}
+            {/* Placeholder if no subjects */}
+            {subjectStats.length === 0 && (
+              <p className="md:col-span-2 text-center text-slate-500 dark:text-slate-400 py-6">
+                No subjects found. Add questions in the admin panel.
+              </p>
+            )}
           </div>
         </div>
 
@@ -237,10 +241,23 @@ export function Home() {
             </Link>
           </div>
           <div className="space-y-4">
-            {leaderboardPreview.length === 0 ? (
+            {loadingLeaderboard ? (
+              // Simple skeleton for leaderboard
+              Array.from({ length: 5 }).map((_, index) => (
+                <div key={index} className="flex items-center gap-4 animate-pulse">
+                  <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-700"></div>
+                  <div className="w-10 h-10 rounded-full bg-slate-200 dark:bg-slate-700"></div>
+                  <div className="flex-1 space-y-2">
+                    <div className="h-4 rounded bg-slate-200 dark:bg-slate-700 w-3/4"></div>
+                    <div className="h-3 rounded bg-slate-200 dark:bg-slate-700 w-1/2"></div>
+                  </div>
+                  <div className="h-4 rounded bg-slate-200 dark:bg-slate-700 w-1/4"></div>
+                </div>
+              ))
+            ) : leaderboardPreview.length === 0 ? (
               <p className="p-4 text-center text-slate-500 dark:text-slate-400">No users yet.</p>
             ) : (
-              // Display users sorted by calculated rating
+              // Display users (already sorted by rating from query)
               leaderboardPreview.map((leader, index) => (
                 <div key={leader.uid} className="flex items-center gap-4">
                   {/* Rank */}
@@ -253,7 +270,7 @@ export function Home() {
                     {index + 1}
                   </div>
                   {/* Avatar */}
-                  <img src={leader.avatar || '/user.png'} alt={leader.name} className="w-10 h-10 rounded-full object-cover border dark:border-slate-700" onError={(e) => { e.currentTarget.src = '/user.png'; }}/>
+                  <img src={leader.avatar || '/user.png'} alt={leader.name} className="w-10 h-10 rounded-full object-cover border dark:border-slate-700" onError={(e) => { (e.target as HTMLImageElement).src = '/user.png'; }}/>
                   {/* Name & Solved */}
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-slate-800 dark:text-white truncate">{leader.name}</p>

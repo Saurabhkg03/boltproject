@@ -63,83 +63,106 @@ export const HomeSkeleton = () => (
 );
 
 // --- Practice Page Skeletons ---
-const PracticeListItemSkeleton = () => (
-    <>
-        {/* Mobile Skeleton */}
-        <div className="block md:hidden px-4 py-4">
-            <SkeletonBase className="h-5 w-3/4 mb-2" />
-            <div className="flex items-center gap-2 mb-2">
-                <SkeletonBase className="w-4 h-4 rounded-full" />
-                <SkeletonBase className="h-3 w-16" />
-            </div>
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                <SkeletonBase className="h-5 w-12 rounded-full" />
-                <SkeletonBase className="h-5 w-20 rounded-full" />
-                <SkeletonBase className="h-5 w-10 rounded" />
-            </div>
-        </div>
-        {/* Desktop Skeleton */}
-        <tr className="hidden md:table-row">
-            <td className="px-6 py-4"><SkeletonBase className="w-5 h-5 rounded-full mx-auto" /></td>
-            <td className="px-6 py-4"><SkeletonBase className="h-4 w-3/5" /></td>
-            <td className="px-6 py-4"><SkeletonBase className="h-4 w-4/5" /></td>
-            <td className="px-6 py-4"><SkeletonBase className="h-5 w-16 rounded-full" /></td>
-            <td className="px-6 py-4 space-x-1"><SkeletonBase className="inline-block h-4 w-16 rounded" /> <SkeletonBase className="inline-block h-4 w-10 rounded" /></td>
-        </tr>
-    </>
+
+// --- FIX: Split into two components to avoid DOM nesting errors ---
+
+const MobilePracticeListItemSkeleton = () => (
+  <div className="block px-4 py-4">
+      <SkeletonBase className="h-5 w-3/4 mb-2" />
+      <div className="flex items-center gap-2 mb-2">
+          <SkeletonBase className="w-4 h-4 rounded-full" />
+          <SkeletonBase className="h-3 w-16" />
+      </div>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <SkeletonBase className="h-5 w-12 rounded-full" />
+          <SkeletonBase className="h-5 w-20 rounded-full" />
+          <SkeletonBase className="h-5 w-10 rounded" />
+      </div>
+  </div>
 );
 
+const DesktopPracticeListItemSkeleton = () => (
+  <tr className="hidden md:table-row">
+      <td className="px-6 py-4"><SkeletonBase className="w-5 h-5 rounded-full mx-auto" /></td>
+      <td className="px-6 py-4"><SkeletonBase className="h-4 w-3/5" /></td>
+      <td className="px-6 py-4"><SkeletonBase className="h-4 w-4/5" /></td>
+      <td className="px-6 py-4"><SkeletonBase className="h-4 w-3/5" /></td> {/* Added for Type column */}
+      <td className="px-6 py-4"><SkeletonBase className="h-5 w-16 rounded-full" /></td>
+      <td className="px-6 py-4 space-x-1"><SkeletonBase className="inline-block h-4 w-16 rounded" /> <SkeletonBase className="inline-block h-4 w-10 rounded" /></td>
+  </tr>
+);
+// --- END FIX ---
+
+
 export const PracticeSkeleton = () => (
-  <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-    <div className="mb-8">
-      <SkeletonBase className="h-8 w-1/3 mb-2" />
-      <SkeletonBase className="h-4 w-1/4" />
+  <div className="max-w-full mx-auto flex flex-col md:flex-row"> {/* Match page layout */}
+    {/* Sidebar Skeleton */}
+    <div className="w-full md:w-64 lg:w-72 flex-shrink-0 p-4 space-y-4 md:border-r border-slate-200 dark:border-slate-800">
+        <div className="flex justify-between items-center mb-2">
+          <SkeletonBase className="h-4 w-24" />
+          <SkeletonBase className="h-6 w-6 rounded-md" />
+        </div>
+        <div className="flex flex-col gap-1">
+          <SkeletonBase className="h-10 w-full rounded-lg" />
+          <SkeletonBase className="h-10 w-full rounded-lg" />
+          <SkeletonBase className="h-10 w-full rounded-lg" />
+        </div>
     </div>
-    {/* Filters Skeleton */}
-    <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4 md:p-6 mb-6">
-        <div className="space-y-4">
-            <SkeletonBase className="h-10 w-full rounded-lg" />
-            <div className="flex flex-wrap items-center gap-2">
-                <SkeletonBase className="h-8 w-24 rounded-md" />
-                <SkeletonBase className="h-8 w-32 rounded-md" />
-                <SkeletonBase className="h-8 w-28 rounded-md" />
-                <SkeletonBase className="h-8 w-20 rounded-md" />
-                <SkeletonBase className="h-8 w-24 rounded-md" />
-                <div className="flex-grow"></div>
-                <SkeletonBase className="h-8 w-36 rounded-md" />
-                <SkeletonBase className="h-8 w-10 rounded-md" />
+    
+    {/* Main Content Skeleton */}
+    <div className="flex-1 min-w-0">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="mb-8">
+          <SkeletonBase className="h-8 w-1/3 mb-2" />
+          <SkeletonBase className="h-4 w-1/4" />
+        </div>
+        {/* Filters Skeleton */}
+        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4 md:p-6 mb-6">
+            <div className="space-y-4">
+                <SkeletonBase className="h-10 w-full rounded-lg" />
+                <div className="flex flex-wrap items-center gap-2">
+                    <SkeletonBase className="h-8 w-24 rounded-md" />
+                    <SkeletonBase className="h-8 w-32 rounded-md" />
+                    <SkeletonBase className="h-8 w-28 rounded-md" />
+                    <SkeletonBase className="h-8 w-20 rounded-md" />
+                    <SkeletonBase className="h-8 w-24 rounded-md" />
+                    <div className="flex-grow"></div>
+                    <SkeletonBase className="h-8 w-36 rounded-md" />
+                    <SkeletonBase className="h-8 w-10 rounded-md" />
+                </div>
             </div>
         </div>
-    </div>
-    {/* List Skeleton */}
-    <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
-        {/* Mobile */}
-        <div className="divide-y divide-gray-200 dark:divide-gray-800 md:hidden">
-            {[...Array(5)].map((_, i) => <PracticeListItemSkeleton key={i} />)}
+        {/* List Skeleton */}
+        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
+            {/* --- FIX: Use correct skeleton for each view --- */}
+            <div className="divide-y divide-gray-200 dark:divide-gray-800 md:hidden">
+                {[...Array(5)].map((_, i) => <MobilePracticeListItemSkeleton key={i} />)}
+            </div>
+            <div className="hidden md:block">
+                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-800">
+                    <thead className="bg-gray-50 dark:bg-gray-800">
+                        <tr>
+                            {[...Array(7)].map((_, i) => ( // Adjust column count if needed
+                                <th key={i} scope="col" className="px-6 py-3">
+                                    <SkeletonBase className="h-4 w-16" />
+                                </th>
+                            ))}
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
+                        {[...Array(5)].map((_, i) => <DesktopPracticeListItemSkeleton key={i} />)}
+                    </tbody>
+                </table>
+            </div>
+            {/* --- END FIX --- */}
         </div>
-        {/* Desktop */}
-        <div className="hidden md:block">
-            <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-800">
-                <thead className="bg-gray-50 dark:bg-gray-800">
-                    <tr>
-                        {[...Array(6)].map((_, i) => ( // Adjust column count if needed
-                            <th key={i} scope="col" className="px-6 py-3">
-                                <SkeletonBase className="h-4 w-16" />
-                            </th>
-                        ))}
-                    </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
-                    {[...Array(5)].map((_, i) => <PracticeListItemSkeleton key={i} />)}
-                </tbody>
-            </table>
+        {/* Pagination Skeleton */}
+        <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <SkeletonBase className="h-9 w-28 rounded-md" />
+            <SkeletonBase className="h-4 w-24 rounded" />
+            <SkeletonBase className="h-9 w-24 rounded-md" />
         </div>
-    </div>
-     {/* Pagination Skeleton */}
-     <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4">
-        <SkeletonBase className="h-9 w-28 rounded-md" />
-        <SkeletonBase className="h-4 w-24 rounded" />
-        <SkeletonBase className="h-9 w-24 rounded-md" />
+      </div>
     </div>
   </div>
 );
@@ -303,7 +326,7 @@ export const ProfileSkeleton = () => (
                 </div>
             </div>
              {/* Subject Mastery */}
-             <div className="bg-white dark:bg-slate-900/70 p-6 rounded-xl border border-gray-200 dark:border-gray-800">
+             <div className="bg-white dark:bg-slate-900/7Vl3gOFyvx6GwhxOqd9+h3wXjI8Q/J/Zwc6Y6A1/ivQk/xG4v3lA==">
                 <SkeletonBase className="h-6 w-1/2 mb-4" />
                 <div className="space-y-4">
                     {[...Array(4)].map((_, i) => (
@@ -360,3 +383,4 @@ export const ProfileSkeleton = () => (
       </div>
     </div>
 );
+

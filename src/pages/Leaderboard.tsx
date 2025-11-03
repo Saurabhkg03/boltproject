@@ -1,17 +1,16 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { Trophy, Target, Crown, ChevronLeft, ChevronRight, BarChart, Info, X } from 'lucide-react';
-// Corrected import paths (removed extensions)
 import { db } from '../firebase';
 import { collection, getDocs, query, orderBy, limit, startAfter, getCountFromServer, DocumentSnapshot, endBefore, limitToLast } from 'firebase/firestore';
-import { User } from '../data/mockData'; // User interface now includes 'rating'
+import { User } from '../data/mockData';
 import { useAuth } from '../contexts/AuthContext';
 import { LeaderboardSkeleton } from '../components/Skeletons';
 
 const PAGE_SIZE = 10;
 const RATING_SCALING_FACTOR = 100;
 
-// --- RATING FUNCTION ---
+// --- RATING FUNCTION (for modal display only) ---
 const calculateRating = (accuracy: number | undefined, correct: number | undefined): number => {
     const safeAccuracy = accuracy ?? 0;
     const safeCorrect = correct ?? 0;
@@ -22,32 +21,33 @@ const calculateRating = (accuracy: number | undefined, correct: number | undefin
 
 // --- PODIUM CARD COMPONENT ---
 const PodiumCard = ({ user, rank }: { user: User; rank: number }) => {
-  const rankStyles = {
+  const rankStyles: Record<number, any> = {
     1: { gradient: 'from-amber-400 to-yellow-500', shadow: 'shadow-yellow-500/40', iconColor: 'text-amber-600 dark:text-amber-300', ring: 'ring-yellow-400', order: 'order-1 md:order-2', height: 'mt-0 md:-mt-6' },
     2: { gradient: 'from-slate-400 to-gray-500', shadow: 'shadow-gray-500/40', iconColor: 'text-gray-600 dark:text-slate-300', ring: 'ring-gray-400', order: 'order-2 md:order-1', height: 'mt-0' },
     3: { gradient: 'from-orange-400 to-amber-600', shadow: 'shadow-orange-600/40', iconColor: 'text-orange-600 dark:text-orange-300', ring: 'ring-orange-500', order: 'order-3', height: 'mt-0' },
-  }[rank] || {};
+  };
+  const styles = rankStyles[rank] || {};
 
   return (
-    <div className={`flex flex-col items-center ${rankStyles.order} ${rankStyles.height}`}>
-      <div className={`relative w-full glass-card p-4 rounded-2xl text-center flex flex-col items-center transition-all duration-300 hover:shadow-2xl hover:-translate-y-1 ${rankStyles.shadow}`}>
+    <div className={`flex flex-col items-center ${styles.order} ${styles.height}`}>
+      <div className={`relative w-full glass-card p-4 rounded-2xl text-center flex flex-col items-center transition-all duration-300 hover:shadow-2xl hover:-translate-y-1 ${styles.shadow}`}>
         {rank === 1 && <Crown className="absolute -top-3.5 w-7 h-7 text-yellow-400 drop-shadow-lg" fill="currentColor" />}
-        <div className={`absolute top-2 right-2 text-xl font-bold ${rankStyles.iconColor} opacity-70`}>#{rank}</div>
+        <div className={`absolute top-2 right-2 text-xl font-bold ${styles.iconColor} opacity-70`}>#{rank}</div>
         <img
           src={user.avatar || '/user.png'}
           alt={user.name}
-          className={`w-20 h-20 rounded-full object-cover mb-3 ring-4 ${rankStyles.ring}`}
-          onError={(e) => { e.currentTarget.src = '/user.png'; }}
+          className={`w-20 h-20 rounded-full object-cover mb-3 ring-4 ${styles.ring}`}
+          onError={(e) => { (e.target as HTMLImageElement).src = '/user.png'; }}
         />
         <Link to={`/profile/${user.username}`} className="font-bold text-slate-800 dark:text-white text-base hover:underline truncate w-full">{user.name}</Link>
         <p className="text-xs text-slate-500 dark:text-slate-400 truncate w-full">@{user.username}</p>
-        <div className={`mt-3 w-full bg-gradient-to-r ${rankStyles.gradient} p-2 rounded-lg`}>
+        <div className={`mt-3 w-full bg-gradient-to-r ${styles.gradient} p-2 rounded-lg`}>
           <div className="flex justify-around items-center text-white">
             <div className="text-center">
               <p className="font-bold text-lg">{user.rating ?? 0}</p>
               <p className="text-xs opacity-80">Rating</p>
             </div>
-             <div className="text-center">
+              <div className="text-center">
               <p className="font-bold text-lg">{user.stats?.correct ?? 0}</p>
               <p className="text-xs opacity-80">Solved</p>
             </div>
@@ -99,14 +99,11 @@ const RatingInfoModal = ({ isOpen, onClose }: { isOpen: boolean; onClose: () => 
                     </div>
                     <ul className="list-disc list-inside space-y-1 pl-1">
                         <li><strong className="dark:text-white">Accuracy / 100:</strong> Your overall percentage of correct answers, normalized to a value between 0 and 1.</li>
-                        <li><strong className="dark:text-white">log<sub>10</sub>(Correct + 1):</strong> This part rewards solving more questions. Using a logarithm (base 10) means solving your first few questions correctly gives a bigger boost than solving more questions when you've already solved many. This prevents simply grinding easy questions from inflating the rating too quickly. We add 1 to avoid `log(0)`.</li>
+                        <li><strong className="dark:text-white">log<sub>10</sub>(Correct + 1):</strong> This part rewards solving more questions. Using a logarithm (base 10) means solving your first few questions correctly gives a bigger boost than solving more questions when you've already solved many.</li>
                         <li><strong className="dark:text-white">{RATING_SCALING_FACTOR}:</strong> This simply scales the result to make the rating number easier to read (e.g., 150 instead of 1.5).</li>
                     </ul>
-                     <p className="text-xs pt-2 text-slate-500 dark:text-slate-400">
-                        Note: This rating primarily reflects performance on this platform and doesn't currently factor in individual question difficulty.
-                    </p>
-                     <p>
-                        <strong className="dark:text-white">Rating Range:</strong> The lowest possible rating is 0. There's no theoretical upper limit, but the logarithmic factor means the rating increases more slowly as you solve a very high number of questions.
+                    <p className="text-xs pt-2 text-slate-500 dark:text-slate-400">
+                      Note: This rating is pre-calculated and updated in real-time with every submission to ensure the leaderboard is always accurate.
                     </p>
                 </div>
             </div>
@@ -130,7 +127,6 @@ export function Leaderboard() {
 
   // Fetch Leaderboard Data with Pagination and Rating Calculation
   const fetchLeaderboard = useCallback(async (page: number, direction: 'next' | 'prev' | 'first' = 'first') => {
-    // Start loading indicators
     if (direction === 'first') setLoadingData(true);
     else setLoadingMore(true);
 
@@ -139,87 +135,73 @@ export function Leaderboard() {
 
       // Fetch total count only on first load
       if (direction === 'first') {
+          // This costs 1 read regardless of user count
           const countSnapshot = await getCountFromServer(query(usersCollection));
           setTotalUsers(countSnapshot.data().count);
       }
 
-      // Base query - primarily ordered by 'correct' for efficient fetching of top candidates
-      let q = query(usersCollection);
-      q = query(q, orderBy('stats.correct', 'desc'), orderBy('stats.accuracy', 'desc')); // Keep secondary sort
+      // --- *** THE FIX *** ---
+      // We no longer sort by stats.correct. We sort directly by the
+      // pre-calculated 'rating' field, which is accurate and indexed.
+      let q = query(usersCollection, orderBy('rating', 'desc'));
 
       // Apply pagination logic based on cursors
       if (direction === 'next' && lastVisible) {
         q = query(q, startAfter(lastVisible), limit(PAGE_SIZE));
       } else if (direction === 'prev' && firstVisible) {
-         // Firestore doesn't directly support endBefore with startAfter logic easily.
-         // Fetching requires knowing the document *before* the firstVisible based on the order.
-         // For simplicity with client-side sorting, we re-fetch from the start up to the current page if going back.
-         // A more complex server-side solution or different data structure would be needed for perfect backward pagination with this client-side sort.
-         // Let's stick to simple forward/first pagination for now or refetch up to the previous page end.
-         // Simpler: Fetch the page before the current firstVisible
-         q = query(q, endBefore(firstVisible), limitToLast(PAGE_SIZE));
+        q = query(q, endBefore(firstVisible), limitToLast(PAGE_SIZE));
       } else { // 'first' or initial load
         q = query(q, limit(PAGE_SIZE));
       }
 
       const usersSnapshot = await getDocs(q);
+      
       // Map Firestore data and ensure stats exist
       const usersData = usersSnapshot.docs.map(doc => {
           const data = doc.data() as User;
           // Ensure stats object and its properties exist, default to 0
           if (!data.stats) {
-              data.stats = { attempted: 0, correct: 0, accuracy: 0 };
-          } else {
-               data.stats.attempted = data.stats.attempted ?? 0;
-               data.stats.correct = data.stats.correct ?? 0;
-               data.stats.accuracy = data.stats.accuracy ?? 0;
+              data.stats = { attempted: 0, correct: 0, accuracy: 0, subjects: {} };
+          }
+          // Ensure rating exists
+          if (data.rating === undefined) {
+              data.rating = 0;
           }
           return data;
       });
+      // --- *** END OF FIX *** ---
 
-      console.log(`Firestore Leaderboard: Fetched ${usersSnapshot.docs.length} users pre-sort.`);
+      console.log(`Firestore Leaderboard: Fetched ${usersSnapshot.docs.length} users.`);
 
-      // Calculate rating for each fetched user
-      const usersWithRating = usersData.map(user => ({
-          ...user,
-          rating: calculateRating(user.stats?.accuracy, user.stats?.correct) // Assign calculated rating
-      }));
+      // NO MORE CLIENT-SIDE SORTING NEEDED
+      // The data is already sorted correctly by Firestore.
 
-      // Re-sort client-side based on the calculated rating
-      usersWithRating.sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0));
-      console.log(`Client-side: Re-sorted ${usersWithRating.length} users by calculated rating.`);
+      setLeaderboard(direction === 'prev' ? usersData.reverse() : usersData);
 
-      // Set the client-side sorted list
-      // Handle reversing for 'prev' direction after client-side sort
-       setLeaderboard(direction === 'prev' ? usersWithRating.reverse() : usersWithRating);
-
-
-      // Update Firestore cursors (still based on the Firestore query order)
+      // Update Firestore cursors
       if (usersSnapshot.docs.length > 0) {
-        // Correctly get first/last doc based on potential reversal needed by pagination logic
         if (direction === 'prev') {
-             // For limitToLast, the effective first visible is the first doc in the *original* snapshot
-             setFirstVisible(usersSnapshot.docs[0]);
-             // The effective last visible is the last doc in the *original* snapshot
-             setLastVisible(usersSnapshot.docs[usersSnapshot.docs.length - 1]);
+            setFirstVisible(usersSnapshot.docs[0]);
+            setLastVisible(usersSnapshot.docs[usersSnapshot.docs.length - 1]);
         } else {
-             setFirstVisible(usersSnapshot.docs[0]);
-             setLastVisible(usersSnapshot.docs[usersSnapshot.docs.length - 1]);
+            setFirstVisible(usersSnapshot.docs[0]);
+            setLastVisible(usersSnapshot.docs[usersSnapshot.docs.length - 1]);
         }
-      } else if (direction !== 'prev') { // Only clear if moving forward/first results in empty
+      } else if (direction !== 'prev') {
         setFirstVisible(null);
         setLastVisible(null);
       }
-      // If direction is 'prev' and results are empty, keep existing cursors
 
       setCurrentPage(page);
 
     } catch (error) {
       console.error("Error fetching leaderboard data:", error);
-      // Reset state on error
+      // You may need to create this index in Firestore!
+      if ((error as any).code === 'failed-precondition') {
+          console.error("INDEXING ERROR: Please create a descending index on the 'rating' field in the 'users' collection.");
+      }
       setLeaderboard([]); setTotalUsers(0); setFirstVisible(null); setLastVisible(null);
     } finally {
-      // Stop loading indicators
       setLoadingData(false); setLoadingMore(false);
     }
   }, [firstVisible, lastVisible]); // Depend on cursors for pagination
@@ -233,13 +215,11 @@ export function Leaderboard() {
 
   // Pagination handlers
   const handleNextPage = () => {
-    // Check total users and if lastVisible exists before fetching next
     if (!loadingMore && lastVisible && currentPage < totalPages) {
       fetchLeaderboard(currentPage + 1, 'next');
     }
   };
   const handlePrevPage = () => {
-     // Check if firstVisible exists before fetching previous
     if (!loadingMore && firstVisible && currentPage > 1) {
        fetchLeaderboard(currentPage - 1, 'prev');
     }
@@ -266,18 +246,17 @@ export function Leaderboard() {
             <h1 className="text-3xl font-bold text-slate-900 dark:text-white">Leaderboard</h1>
             {/* Info Button */}
             <button
-                onClick={() => setIsInfoModalOpen(true)}
-                className="p-1 rounded-full text-blue-500 hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors"
-                aria-label="How rating is calculated"
+              onClick={() => setIsInfoModalOpen(true)}
+              className="p-1 rounded-full text-blue-500 hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors"
+              aria-label="How rating is calculated"
             >
-                <Info className="w-5 h-5" />
+              <Info className="w-5 h-5" />
             </button>
           </div>
            <p className="text-slate-600 dark:text-slate-400 text-sm">
-             {/* Updated text to mention rating */}
              {totalUsers > 0
-                ? `Showing ranks ${ (currentPage - 1) * PAGE_SIZE + 1 }-${ Math.min(currentPage * PAGE_SIZE, totalUsers) } of ${totalUsers} users (ranked by rating)`
-                : 'Top performers in GATE ECE preparation'
+               ? `Showing ranks ${ (currentPage - 1) * PAGE_SIZE + 1 }-${ Math.min(currentPage * PAGE_SIZE, totalUsers) } of ${totalUsers} users (ranked by rating)`
+               : 'Top performers in GATE ECE preparation'
              }
            </p>
         </div>
@@ -292,12 +271,10 @@ export function Leaderboard() {
         )}
         {/* --- END PODIUM SECTION --- */}
 
-        {/* --- Removed Sort Controls --- */}
-
         {/* Leaderboard List Container */}
-        <div className="glass-card overflow-hidden relative mt-4"> {/* Added mt-4 since sort controls removed */}
-           {/* Loading overlay for pagination */}
-           {loadingMore && <div className="absolute inset-0 bg-white/50 dark:bg-black/50 flex items-center justify-center z-10"><div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div></div>}
+        <div className="glass-card overflow-hidden relative mt-4">
+          {/* Loading overlay for pagination */}
+          {loadingMore && <div className="absolute inset-0 bg-white/50 dark:bg-black/50 flex items-center justify-center z-10"><div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div></div>}
           <div>
             {listUsers.map((user, index) => {
               // Calculate rank based on current page and index within the list portion
@@ -307,7 +284,7 @@ export function Leaderboard() {
               return (
                 <div key={user.uid} className={`flex items-center px-4 py-3 border-b border-slate-200 dark:border-slate-800 last:border-b-0 hover:bg-slate-100/50 dark:hover:bg-slate-800/50 transition-colors`}>
                   {/* Rank */}
-                  <div className="w-12 text-center font-bold text-slate-500 dark:text-slate-400 text-sm"> {/* Wider rank column */}
+                  <div className="w-12 text-center font-bold text-slate-500 dark:text-slate-400 text-sm">
                       {rank}
                   </div>
                   {/* User Info */}
@@ -316,7 +293,7 @@ export function Leaderboard() {
                       src={user.avatar || '/user.png'}
                       alt={user.name}
                       className="w-9 h-9 rounded-full object-cover flex-shrink-0 border dark:border-slate-700"
-                      onError={(e) => { e.currentTarget.src = '/user.png'; }}
+                      onError={(e) => { (e.target as HTMLImageElement).src = '/user.png'; }}
                     />
                     <div className="overflow-hidden">
                       <Link to={`/profile/${user.username}`} className="font-medium text-slate-800 dark:text-white hover:underline truncate text-sm block">{user.name}</Link>
@@ -325,28 +302,28 @@ export function Leaderboard() {
                   </div>
                   {/* Stats: Rating and Accuracy */}
                   <div className="flex items-center justify-end gap-3 sm:gap-4 md:gap-6 text-right flex-shrink-0 pl-2">
-                     {/* Rating */}
-                     <div className="flex items-center justify-end gap-1 sm:gap-1.5 text-blue-600 dark:text-blue-400 text-xs sm:text-sm min-w-[60px] sm:min-w-[70px]" title="Performance Rating">
-                      <BarChart className="w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0" />
-                      <span className="font-semibold">{user.rating ?? 0}</span> {/* Display rating */}
-                    </div>
-                     {/* Accuracy */}
-                     <div className="flex items-center justify-end gap-1 sm:gap-1.5 text-emerald-600 dark:text-emerald-400 text-xs sm:text-sm min-w-[50px] sm:min-w-[60px]" title="Accuracy">
-                      <Target className="w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0" />
-                      <span className="font-semibold">{(user.stats?.accuracy ?? 0).toFixed(1)}%</span>
-                    </div>
+                      {/* Rating */}
+                      <div className="flex items-center justify-end gap-1 sm:gap-1.5 text-blue-600 dark:text-blue-400 text-xs sm:text-sm min-w-[60px] sm:min-w-[70px]" title="Performance Rating">
+                        <BarChart className="w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0" />
+                        <span className="font-semibold">{user.rating ?? 0}</span> {/* Display rating */}
+                      </div>
+                      {/* Accuracy */}
+                      <div className="flex items-center justify-end gap-1 sm:gap-1.5 text-emerald-600 dark:text-emerald-400 text-xs sm:text-sm min-w-[50px] sm:min-w-[60px]" title="Accuracy">
+                        <Target className="w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0" />
+                        <span className="font-semibold">{(user.stats?.accuracy ?? 0).toFixed(1)}%</span>
+                      </div>
                   </div>
                 </div>
               );
             })}
-             {/* No Users Message */}
-             {listUsers.length === 0 && !loadingData && (
-                 <p className="text-center py-10 text-slate-500 dark:text-slate-400">No users found for this page.</p>
-             )}
+            {/* No Users Message */}
+            {listUsers.length === 0 && !loadingData && (
+                <p className="text-center py-10 text-slate-500 dark:text-slate-400">No users found for this page.</p>
+            )}
           </div>
         </div>
 
-         {/* Pagination Controls */}
+          {/* Pagination Controls */}
         {totalUsers > PAGE_SIZE && (
             <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4">
                 <button
@@ -370,15 +347,15 @@ export function Leaderboard() {
         )}
       </div>
 
-       {/* Rating Info Modal */}
-      <RatingInfoModal isOpen={isInfoModalOpen} onClose={() => setIsInfoModalOpen(false)} />
+      {/* Rating Info Modal */}
+    <RatingInfoModal isOpen={isInfoModalOpen} onClose={() => setIsInfoModalOpen(false)} />
 
-      {/* Reusable pagination button style */}
-       <style>{`
+    {/* Reusable pagination button style */}
+      <style>{`
             .pagination-button {
                 @apply w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed;
             }
-       `}</style>
+      `}</style>
     </div>
   );
 }

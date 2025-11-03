@@ -2,8 +2,10 @@ import { BrowserRouter, Routes, Route, useLocation, Navigate } from 'react-route
 import { ThemeProvider } from './contexts/ThemeContext';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { DailyChallengeProvider } from './contexts/DailyChallengeContext.tsx';
+// --- We must import MetadataProvider here ---
+import { MetadataProvider } from './contexts/MetadataContext.tsx'; 
 import { Navbar } from './components/Navbar';
-import { ProtectedRoute } from './components/ProtectedRoute.tsx'; // <-- Added .tsx extension
+import { ProtectedRoute } from './components/ProtectedRoute.tsx';
 import { Home } from './pages/Home';
 import { Practice } from './pages/Practice';
 import { QuestionDetail } from './pages/QuestionDetail';
@@ -15,10 +17,9 @@ import { AddQuestion } from './pages/AddQuestion';
 import { Settings } from './pages/Settings';
 import { useEffect } from 'react';
 import { NotFound } from './pages/NotFound';
-// NOTE: Removed Loader2 import as it's not used when returning null or using the HTML loader
 
 const AppContent = () => {
-  const { userInfo, loading, isAuthenticated } = useAuth(); // <-- Added isAuthenticated and reverted to 'loading'
+  const { userInfo, loading, isAuthenticated } = useAuth(); 
   const location = useLocation();
 
   useEffect(() => {
@@ -66,7 +67,7 @@ const AppContent = () => {
 
 
           {/* Protected Routes */}
-           <Route
+            <Route
             path="/settings"
             element={
               <ProtectedRoute>
@@ -112,12 +113,18 @@ function App() {
     <ThemeProvider>
       <BrowserRouter>
         <AuthProvider>
-         <DailyChallengeProvider>
-          {/* Apply gradient/base styles here if needed globally */}
-          <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
-            <AppContent />
-          </div>
-         </DailyChallengeProvider>
+         {/* --- THIS IS THE FIX ---
+             MetadataProvider must be *outside* DailyChallengeProvider,
+             because DailyChallengeProvider uses it.
+         --- */}
+          <MetadataProvider>
+            <DailyChallengeProvider>
+              <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
+                <AppContent />
+              </div>
+            </DailyChallengeProvider>
+          </MetadataProvider>
+         {/* --- END OF FIX --- */}
         </AuthProvider>
       </BrowserRouter>
     </ThemeProvider>
