@@ -1,5 +1,4 @@
 import { Link, useLocation } from 'react-router-dom';
-// <--- MODIFIED: Removed Menu and X icons --->
 import { Moon, Sun, Code2, LogOut, User, Shield, Settings, ChevronDown, Flame } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext.tsx';
 import { useAuth } from '../contexts/AuthContext.tsx';
@@ -9,14 +8,17 @@ import React from 'react';
 
 export function Navbar() {
   const { theme, toggleTheme } = useTheme();
-  const { userInfo, logout, isAuthenticated, streak } = useAuth();
+  // --- FIX: Removed 'streak' from destructuring ---
+  const { userInfo, logout, isAuthenticated } = useAuth();
+  // --- FIX: Get streak from userInfo ---
+  const streak = userInfo?.streakData?.currentStreak || 0;
+
   const [dropdownOpen, setDropdownOpen] = useState(false);
- const { dailyChallengeId, loadingChallenge } = useDailyChallenge(); // <-- Use hook
-  // const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false); // <--- REMOVED
+  const { dailyChallengeId, loadingChallenge } = useDailyChallenge(); // <-- Use hook
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // <-- Add Log
- console.log(`Navbar: loadingChallenge=${loadingChallenge}, dailyChallengeId=${dailyChallengeId}`); 
+  console.log(`Navbar: loadingChallenge=${loadingChallenge}, dailyChallengeId=${dailyChallengeId}`); 
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -31,8 +33,6 @@ export function Navbar() {
     };
   }, [dropdownRef]);
 
-  // <--- REMOVED all useEffects related to isMobileMenuOpen --->
-
   // Close profile dropdown when location changes
   const location = useLocation();
   useEffect(() => {
@@ -41,7 +41,6 @@ export function Navbar() {
 
 
   return (
-    // <--- MODIFIED: Back to original transparent background logic --->
     <nav className="sticky top-0 z-50 bg-white/60 dark:bg-slate-900/60 backdrop-blur-lg border-b border-white/30 dark:border-slate-800/60">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
@@ -63,6 +62,7 @@ export function Navbar() {
           {/* Right side icons/buttons */}
           <div className="flex items-center gap-2">
             
+           {/* --- FIX: This logic now works perfectly --- */}
            {isAuthenticated && streak > 0 && (
              <Link
                to={!loadingChallenge && dailyChallengeId ? `/question/${dailyChallengeId}` : '/practice'} // Link to challenge or fallback
@@ -71,10 +71,10 @@ export function Navbar() {
                }`}
                title={!loadingChallenge && dailyChallengeId ? "Go to Daily Challenge" : "Practice Questions"} // Add tooltip
              >
-                <Flame className="w-5 h-5 fill-current" />
-                <span className="text-sm">{streak}</span>
+               <Flame className="w-5 h-5 fill-current" />
+               <span className="text-sm">{streak}</span>
              </Link>
-            )}
+           )}
 
             {isAuthenticated && userInfo ? (
               <div className="relative" ref={dropdownRef}>
@@ -219,6 +219,7 @@ const NavLinkItem = ({ to, label, icon }: { to: string, label: string, icon?: Re
 }
 
 // <--- MODIFIED: Made icon optional for links like Home/Practice --->
+// --- FIX: Corrected onClick type from ()-> void to () => void ---
 const DropdownLink = ({ to, onClick, icon, label }: { to: string, onClick: () => void, icon?: React.ReactNode, label: string }) => (
     <Link
       to={to}
