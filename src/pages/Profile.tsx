@@ -1,6 +1,6 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { Calendar, Settings as SettingsIcon, CheckCircle, TrendingUp, Zap, BarChart, Loader2 } from 'lucide-react'; // Removed ChevronDown
+import { Calendar, Settings as SettingsIcon, CheckCircle, TrendingUp, Zap, BarChart, Loader2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { db } from '../firebase';
 import { 
@@ -11,28 +11,20 @@ import {
     orderBy, 
     documentId, 
     doc, 
-    onSnapshot, // Import onSnapshot for real-time user data
+    onSnapshot,
     limit,
     startAfter,
     DocumentSnapshot,
     DocumentData
 } from 'firebase/firestore';
+// --- FIXED: Removed unused imports ---
 import { User, Submission, Question } from '../data/mockData';
-import { UserNotFound } from './UserNotFound';
+import { UserNotFound } from '../pages/UserNotFound';
 import { ProfileSkeleton } from '../components/Skeletons';
-// Import the metadata hook
+// --- UPDATED: Import the metadata hook ---
 import { useMetadata } from '../contexts/MetadataContext';
 
-const RATING_SCALING_FACTOR = 100;
 const SUBMISSIONS_PAGE_SIZE = 5; // How many submissions to load at a time
-
-// --- RATING FUNCTION ---
-const calculateRating = (accuracy: number | undefined, correct: number | undefined): number => {
-    const safeAccuracy = accuracy ?? 0;
-    const safeCorrect = correct ?? 0;
-    const rating = Math.max(0, (safeAccuracy / 100) * Math.log10(safeCorrect + 1) * RATING_SCALING_FACTOR);
-    return parseFloat(rating.toFixed(2));
-};
 
 // --- HELPER COMPONENTS ---
 const StatCard = ({ icon: Icon, value, label, colorClass }: { icon: React.ElementType, value: string | number, label: string, colorClass: string }) => (
@@ -56,6 +48,7 @@ const ActivityCalendar = ({ calendarData, availableYears }: { calendarData: Reco
   const displayYears = useMemo(() => {
     const yearsSet = new Set(availableYears);
     yearsSet.add(currentYear);
+    // Ensure the last 5 years are available even if no data
     const lastFiveYears = Array.from({ length: 5 }, (_, i) => currentYear - i);
     lastFiveYears.forEach(year => yearsSet.add(year));
     return Array.from(yearsSet).sort((a, b) => b - a);
@@ -68,7 +61,6 @@ const ActivityCalendar = ({ calendarData, availableYears }: { calendarData: Reco
   }, [displayYears, selectedYear, currentYear]);
 
 
-  // --- FIX: Renamed calendarGrid to calendarData ---
   const { yearlySubmissions, calendarData: calendarGrid, monthLabels } = useMemo(() => {
     let submissionCount = 0;
     const submissionCounts: Record<string, number> = {};
@@ -76,9 +68,7 @@ const ActivityCalendar = ({ calendarData, availableYears }: { calendarData: Reco
     // Filter the pre-calculated data for the selected year
     for (const dateStr in calendarData) {
         if (dateStr.startsWith(selectedYear.toString())) {
-            // Use 'YYYY-MM-DD' key from our new data structure
             const count = calendarData[dateStr] || 0;
-            // FIX: Ensure correct date object parsing for cross-browser safety
             const dateObj = new Date(dateStr + 'T00:00:00'); // Assume local time
             submissionCounts[dateObj.toDateString()] = count;
             submissionCount += count;
@@ -143,9 +133,7 @@ const ActivityCalendar = ({ calendarData, availableYears }: { calendarData: Reco
     });
 
     return { yearlySubmissions: submissionCount, calendarData: trimmedCalendarGrid, monthLabels };
-
-  // --- FIX: Changed circular dependency from calendarData to submissions ---
-  }, [selectedYear, calendarData]); // This should be calendarData (the prop), not submissions
+  }, [selectedYear, calendarData]);
 
   const getIntensity = (count: number) => {
     if (count === 0) return 'bg-slate-200 dark:bg-slate-800 opacity-50 dark:opacity-40';
@@ -204,7 +192,6 @@ const ActivityCalendar = ({ calendarData, availableYears }: { calendarData: Reco
                     </div>
 
                     <div className="grid grid-flow-col auto-cols-max gap-1">
-                        {/* --- FIX: Added types to map params --- */}
                         {calendarGrid.map((week: ({ date: Date; count: number } | null)[], weekIndex: number) => (
                             <div key={weekIndex} className="grid grid-rows-7 gap-1">
                                 {week.map((day: { date: Date; count: number } | null, dayIndex: number) => (
@@ -238,7 +225,8 @@ const ActivityCalendar = ({ calendarData, availableYears }: { calendarData: Reco
 export function Profile() {
     const { username } = useParams<{ username: string }>();
     const { user: authUser, loading: authLoading } = useAuth();
-    const { metadata, loading: metadataLoading } = useMetadata();
+    // --- UPDATED: Get branch context ---
+    const { metadata, loading: metadataLoading, selectedBranch, questionCollectionPath, availableBranches } = useMetadata();
 
     const [profileUser, setProfileUser] = useState<User | null>(null);
     const [loadingUser, setLoadingUser] = useState(true);
@@ -252,12 +240,77 @@ export function Profile() {
     
     const isOwnProfile = authUser && profileUser && authUser.uid === profileUser.uid;
 
+    // --- Paginated function to fetch submissions (NOW BRANCH-AWARE) ---
+    const fetchSubmissions = useCallback(async (profileUid: string, collectionPath: string, branch: string, isFirstPage: boolean = false) => {
+        if (!isFirstPage && !hasMoreSubmissions) return; // Stop if no more
+
+        setLoadingSubmissions(true);
+
+        try {
+            // --- UPDATED: Filter submissions by branch ---
+            let submissionsQuery = query(
+                collection(db, `users/${profileUid}/submissions`), 
+                where('branch', '==', branch), // <-- ADDED BRANCH FILTER
+                orderBy('timestamp', 'desc'), 
+                limit(SUBMISSIONS_PAGE_SIZE)
+            );
+
+            if (!isFirstPage && submissionsLastDoc) {
+                submissionsQuery = query(submissionsQuery, startAfter(submissionsLastDoc));
+            }
+
+            const submissionsSnapshot = await getDocs(submissionsQuery);
+            const submissionsData = submissionsSnapshot.docs.map(doc => doc.data() as Submission);
+            
+            const lastDoc = submissionsSnapshot.docs[submissionsSnapshot.docs.length - 1];
+            setSubmissionsLastDoc(lastDoc || null);
+            setHasMoreSubmissions(submissionsData.length === SUBMISSIONS_PAGE_SIZE);
+
+            const questionIds = [...new Set(submissionsData.map(s => s.qid))];
+            const fetchedQuestions = new Map<string, Question>();
+
+            if (questionIds.length > 0) {
+                // --- UPDATED: Fetch from the correct branch-specific collection ---
+                // We can do this in chunks if needed (max 30 per 'in' query)
+                const chunks: string[][] = [];
+                for (let i = 0; i < questionIds.length; i += 30) {
+                    chunks.push(questionIds.slice(i, i + 30));
+                }
+                
+                for (const chunk of chunks) {
+                    if (chunk.length === 0) continue;
+                    const qQuery = query(collection(db, collectionPath), where(documentId(), 'in', chunk));
+                    const qSnapshot = await getDocs(qQuery);
+                    qSnapshot.forEach(doc => {
+                        fetchedQuestions.set(doc.id, { id: doc.id, ...doc.data() } as Question);
+                    });
+                }
+            }
+
+            const submissionsWithData = submissionsData.map(submission => ({
+                ...submission,
+                question: fetchedQuestions.get(submission.qid)
+            }));
+            
+            setRecentSubmissions(prev => isFirstPage ? submissionsWithData : [...prev, ...submissionsWithData]);
+
+        } catch (error) {
+            console.error("[Profile] Error fetching submissions:", error);
+        } finally {
+            setLoadingSubmissions(false);
+        }
+    }, [hasMoreSubmissions, submissionsLastDoc]); // Dependencies managed by main effect
+
+
     // --- Real-time listener for the profile user's document ---
     useEffect(() => {
-        if (!username) {
-            setLoadingUser(false); setUserFound(false); return;
+        if (!username || !questionCollectionPath || !selectedBranch) {
+            setLoadingUser(true); 
+            setUserFound(false);
+            return;
         };
         
+        console.log(`[Profile] Params ready. Username: ${username}, Branch: ${selectedBranch}`);
         setLoadingUser(true);
         setUserFound(true);
         setProfileUser(null);
@@ -265,7 +318,6 @@ export function Profile() {
         setSubmissionsLastDoc(null);
         setHasMoreSubmissions(false);
 
-        // Find the user by username
         const usersRef = collection(db, 'users');
         const userQuery = query(usersRef, where("username", "==", username), limit(1));
         
@@ -288,11 +340,13 @@ export function Profile() {
             unsubscribe = onSnapshot(userDocRef, (doc) => {
                 if (doc.exists()) {
                     const userData = doc.data() as User;
-                    // Ensure stats exist
-                    if (!userData.stats) { userData.stats = { attempted: 0, correct: 0, accuracy: 0 }; }
-                    if (!userData.streakData) { userData.streakData = { currentStreak: 0, lastSubmissionDate: '' }; }
-                    if (!userData.activityCalendar) { userData.activityCalendar = {}; }
                     
+                    // --- NEW: Initialize branch-specific fields if they don't exist ---
+                    if (!userData.branchStats) { userData.branchStats = {}; }
+                    if (!userData.ratings) { userData.ratings = {}; }
+                    if (!userData.branchActivityCalendar) { userData.branchActivityCalendar = {}; }
+                    if (!userData.branchStreakData) { userData.branchStreakData = {}; }
+
                     setProfileUser(userData);
                     setUserFound(true);
                 } else {
@@ -306,7 +360,8 @@ export function Profile() {
             });
 
             // --- Also fetch the *first page* of submissions ---
-            fetchSubmissions(profileUid, true);
+            // We pass the required branch info directly
+            fetchSubmissions(profileUid, questionCollectionPath, selectedBranch, true);
 
         }).catch(error => {
             console.error("[Profile] Error fetching user by username:", error);
@@ -319,90 +374,50 @@ export function Profile() {
             console.log("[Profile] Unsubscribing from user document.");
             unsubscribe();
         };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [username]);
+    // --- UPDATED: Re-run if username or selectedBranch changes ---
+    // --- FIXED: Removed fetchSubmissions from dependency array to prevent infinite loop ---
+    }, [username, selectedBranch, questionCollectionPath]);
 
 
-    // --- Paginated function to fetch submissions ---
-    const fetchSubmissions = async (profileUid: string, isFirstPage: boolean = false) => {
-        if (!isFirstPage && !hasMoreSubmissions) return; // Stop if no more
-
-        setLoadingSubmissions(true);
-
-        try {
-            let submissionsQuery = query(
-                collection(db, `users/${profileUid}/submissions`), 
-                orderBy('timestamp', 'desc'), 
-                limit(SUBMISSIONS_PAGE_SIZE)
-            );
-
-            // If not the first page, start after the last doc
-            if (!isFirstPage && submissionsLastDoc) {
-                submissionsQuery = query(submissionsQuery, startAfter(submissionsLastDoc));
-            }
-
-            const submissionsSnapshot = await getDocs(submissionsQuery);
-            const submissionsData = submissionsSnapshot.docs.map(doc => doc.data() as Submission);
-            
-            // Store the last doc for pagination
-            const lastDoc = submissionsSnapshot.docs[submissionsSnapshot.docs.length - 1];
-            setSubmissionsLastDoc(lastDoc || null);
-            setHasMoreSubmissions(submissionsData.length === SUBMISSIONS_PAGE_SIZE);
-
-            // --- Get question titles for these submissions ---
-            const questionIds = [...new Set(submissionsData.map(s => s.qid))];
-            const fetchedQuestions = new Map<string, Question>();
-
-            if (questionIds.length > 0) {
-                // We only need to fetch 5 (max) questions, so one chunk is fine
-                const qQuery = query(collection(db, 'questions'), where(documentId(), 'in', questionIds));
-                const qSnapshot = await getDocs(qQuery);
-                qSnapshot.forEach(doc => {
-                    fetchedQuestions.set(doc.id, { id: doc.id, ...doc.data() } as Question);
-                });
-            }
-
-            // Combine submissions with question data
-            const submissionsWithData = submissionsData.map(submission => ({
-                ...submission,
-                question: fetchedQuestions.get(submission.qid)
-            }));
-            
-            // Append to existing list or set new list
-            setRecentSubmissions(prev => isFirstPage ? submissionsWithData : [...prev, ...submissionsWithData]);
-
-        } catch (error) {
-            console.error("[Profile] Error fetching submissions:", error);
-        } finally {
-            setLoadingSubmissions(false);
-        }
-    };
-
-
-    // --- Memoized values derived from the (real-time) profileUser ---
+    // --- Memoized values derived from the (real-time) profileUser AND branch ---
     const { 
-        userRating, 
-        availableYears, 
+        branchRating, 
+        branchStats,
+        branchStreak,
+        branchCalendar,
+        allAvailableYears, 
         subjectStats 
     } = useMemo(() => {
         if (!profileUser || !metadata) {
-            return { userRating: 0, availableYears: [], subjectStats: [] };
+            return { 
+                branchRating: 0, 
+                branchStats: { attempted: 0, correct: 0, accuracy: 0, subjects: {} },
+                branchStreak: { currentStreak: 0, lastSubmissionDate: '' },
+                branchCalendar: {},
+                allAvailableYears: [], 
+                subjectStats: [] 
+            };
         }
 
-        // 1. Calculate Rating
-        const rating = calculateRating(profileUser.stats?.accuracy, profileUser.stats?.correct);
+        // 1. Get stats for the *selected* branch
+        const rating = profileUser.ratings?.[selectedBranch] || 0;
+        const stats = profileUser.branchStats?.[selectedBranch] || { attempted: 0, correct: 0, accuracy: 0, subjects: {} };
+        const streak = profileUser.branchStreakData?.[selectedBranch] || { currentStreak: 0, lastSubmissionDate: '' };
+        const calendar = profileUser.branchActivityCalendar?.[selectedBranch] || {};
 
-        // 2. Get available years from calendar
+        // 2. Get available years from *all* branch calendars
         const years = new Set<number>();
-        if (profileUser.activityCalendar) {
-            Object.keys(profileUser.activityCalendar).forEach(dateStr => {
-                years.add(parseInt(dateStr.substring(0, 4), 10));
+        if (profileUser.branchActivityCalendar) {
+            // Check all calendars for all branches
+            Object.values(profileUser.branchActivityCalendar).forEach(branchCalendar => {
+                 Object.keys(branchCalendar).forEach(dateStr => {
+                    years.add(parseInt(dateStr.substring(0, 4), 10));
+                 });
             });
         }
         
-        // 3. Calculate Subject Stats
-        // We get TOTALS from metadata, SOLVED from user doc
-        const solvedCounts = profileUser.stats?.subjects || {};
+        // 3. Calculate Subject Stats for the *selected* branch
+        const solvedCounts = stats.subjects || {};
         const subjectStats = Object.entries(metadata.subjectCounts || {}).map(([subjectName, total]) => ({
             name: subjectName,
             solved: solvedCounts[subjectName] || 0,
@@ -410,11 +425,14 @@ export function Profile() {
         }));
 
         return {
-            userRating: rating,
-            availableYears: Array.from(years).sort((a,b) => b-a),
+            branchRating: rating,
+            branchStats: stats,
+            branchStreak: streak,
+            branchCalendar: calendar,
+            allAvailableYears: Array.from(years).sort((a,b) => b-a),
             subjectStats: subjectStats
         };
-    }, [profileUser, metadata]);
+    }, [profileUser, metadata, selectedBranch]);
 
 
     // --- Loading / Not Found ---
@@ -424,6 +442,8 @@ export function Profile() {
     if (!userFound || !profileUser) {
         return <UserNotFound />;
     }
+    
+    const branchName = availableBranches[selectedBranch] || 'Stats';
 
     // --- Render ---
     return (
@@ -438,8 +458,9 @@ export function Profile() {
                             <div className="flex flex-col items-center text-center">
                                 <div className="relative">
                                     <img src={profileUser.avatar || '/user.png'} alt={profileUser.name || 'User Avatar'} className="w-28 h-28 rounded-full shadow-lg border-4 border-white dark:border-slate-700 object-cover" onError={(e) => { e.currentTarget.src = '/user.png'; }} />
+                                    {/* --- UPDATED: Show branch-specific rating --- */}
                                     <span className="absolute bottom-0 right-0 bg-gradient-to-tr from-blue-500 to-indigo-600 text-white rounded-full px-2 py-1 text-xs font-bold shadow-md flex items-center gap-1">
-                                        <BarChart className="w-3 h-3"/> {userRating}
+                                        <BarChart className="w-3 h-3"/> {branchRating}
                                     </span>
                                 </div>
                                 <h1 className="text-2xl font-bold text-slate-800 dark:text-white mt-4">{profileUser.name || 'User'}</h1>
@@ -454,7 +475,8 @@ export function Profile() {
 
                         {/* Subject Mastery Card */}
                         <div className="bg-white dark:bg-slate-900/70 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
-                            <h2 className="text-lg font-semibold p-6 border-b border-slate-200 dark:border-slate-800 text-slate-800 dark:text-white">Subject Mastery</h2>
+                            {/* --- UPDATED: Title includes branch name --- */}
+                            <h2 className="text-lg font-semibold p-6 border-b border-slate-200 dark:border-slate-800 text-slate-800 dark:text-white">Subject Mastery ({branchName})</h2>
                             <div className="p-6 space-y-4 max-h-80 overflow-y-auto">
                                 {subjectStats.length > 0 ? (
                                     subjectStats.sort((a,b) => b.total - a.total)
@@ -484,30 +506,34 @@ export function Profile() {
                     <div className="lg:col-span-2 space-y-6">
                         {/* Activity Calendar Card */}
                         <div className="bg-white dark:bg-slate-900/70 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+                             {/* --- UPDATED: Title includes branch name --- */}
+                            <h2 className="text-lg font-semibold pb-2 text-slate-800 dark:text-white">Activity ({branchName})</h2>
                             <ActivityCalendar 
-                                calendarData={profileUser.activityCalendar || {}} 
-                                availableYears={availableYears} 
+                                // --- UPDATED: Pass branch-specific calendar and all years ---
+                                calendarData={branchCalendar} 
+                                availableYears={allAvailableYears} 
                             />
                         </div>
 
                         {/* Stat Cards Grid */}
                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 md:gap-6">
-                            <StatCard icon={BarChart} value={userRating} label="Rating" colorClass="text-blue-500 dark:text-blue-400" />
-                            <StatCard icon={TrendingUp} value={profileUser.stats?.attempted || 0} label="Attempted" colorClass="text-purple-500 dark:text-purple-400" />
-                            <StatCard icon={CheckCircle} value={profileUser.stats?.correct || 0} label="Solved" colorClass="text-emerald-500 dark:text-emerald-400" />
-                            <StatCard icon={Zap} value={`${profileUser.streakData?.currentStreak || 0} Days`} label="Current Streak" colorClass="text-yellow-500 dark:text-yellow-400" />
+                            {/* --- UPDATED: All StatCards now use branch-specific data --- */}
+                            <StatCard icon={BarChart} value={branchRating} label="Rating" colorClass="text-blue-500 dark:text-blue-400" />
+                            <StatCard icon={TrendingUp} value={branchStats.attempted || 0} label="Attempted" colorClass="text-purple-500 dark:text-purple-400" />
+                            <StatCard icon={CheckCircle} value={branchStats.correct || 0} label="Solved" colorClass="text-emerald-500 dark:text-emerald-400" />
+                            <StatCard icon={Zap} value={`${branchStreak.currentStreak || 0} Days`} label="Current Streak" colorClass="text-yellow-500 dark:text-yellow-400" />
                         </div>
 
                         {/* Recent Submissions Card */}
                         <div className="bg-white dark:bg-slate-900/70 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
-                            <h2 className="text-lg font-semibold p-6 border-b border-slate-200 dark:border-slate-800 text-slate-800 dark:text-white">Recent Submissions</h2>
+                             {/* --- UPDATED: Title includes branch name --- */}
+                            <h2 className="text-lg font-semibold p-6 border-b border-slate-200 dark:border-slate-800 text-slate-800 dark:text-white">Recent Submissions ({branchName})</h2>
                             <div className="divide-y divide-slate-200 dark:divide-slate-800">
                                 {recentSubmissions.length > 0 ? ( 
                                     recentSubmissions.map((activity) => ( 
                                         <div key={activity.timestamp + activity.qid} className="p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors gap-2"> 
                                             <div> 
                                                 <Link to={`/question/${activity.qid}`} className="font-semibold text-blue-500 dark:text-blue-400 hover:underline"> 
-                                                    {/* This now works, as we fetched the question data */}
                                                     {activity.question?.title || `Question ${activity.qid.substring(0,6)}...`} 
                                                 </Link> 
                                                 <p className="text-sm text-slate-500 dark:text-slate-400"> 
@@ -520,7 +546,7 @@ export function Profile() {
                                         </div> 
                                     )) 
                                 ) : ( 
-                                    !loadingSubmissions && <p className="p-6 text-slate-500 dark:text-slate-400">No recent submissions found.</p> 
+                                    !loadingSubmissions && <p className="p-6 text-slate-500 dark:text-slate-400">No recent submissions found for this branch.</p> 
                                 )}
                                 
                                 {loadingSubmissions && (
@@ -531,7 +557,7 @@ export function Profile() {
 
                                 {hasMoreSubmissions && !loadingSubmissions && (
                                     <button 
-                                        onClick={() => fetchSubmissions(profileUser.uid, false)}
+                                        onClick={() => fetchSubmissions(profileUser.uid, questionCollectionPath, selectedBranch, false)}
                                         className="w-full p-4 text-sm font-medium text-blue-600 dark:text-blue-400 hover:bg-slate-50 dark:hover:bg-slate-800/50"
                                     >
                                         Load More
@@ -545,4 +571,7 @@ export function Profile() {
         </div>
     );
 }
+
+
+
 

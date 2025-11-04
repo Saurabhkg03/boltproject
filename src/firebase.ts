@@ -48,7 +48,8 @@ export interface Question {
   question_html: string;
   question_image_links: string[];
   explanation_html: string;
-axplanation_image_links: string[];
+  explanation_image_links: string[]; // FIXED TYPO: axplanation_ -> explanation_
+  explanation_redirect_url?: string | null; // ADDED
   options: Option[];
   correctAnswerLabel: string | null; // For MCQ
   correctAnswerLabels: string[]; // For MSQ

@@ -1,19 +1,17 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-// MODIFIED: Removed AlertTriangle
-import { Search, Filter, CheckCircle, Circle, Edit, ArrowDownUp, ChevronLeft, ChevronRight, RotateCcw, List, Plus, Folder, Trash2, X, Loader2, Bookmark as BookmarkIcon, Check as CheckIcon } from 'lucide-react';
-// Import our metadata hook
-import { useMetadata } from '../contexts/MetadataContext.tsx'; 
-import { useAuth } from '../contexts/AuthContext.tsx';
-import { db } from '../firebase.ts';
-import { collection, getDocs, query, where, orderBy, limit, startAfter, DocumentSnapshot, endBefore, limitToLast, doc, getDoc, documentId, addDoc, serverTimestamp, deleteDoc, writeBatch, arrayRemove, onSnapshot } from 'firebase/firestore';
-import { Question, Submission, QuestionList } from '../data/mockData.ts';
-import { PracticeSkeleton } from '../components/Skeletons.tsx';
+import { Search, Filter, CheckCircle, Circle, ArrowDownUp, ChevronLeft, ChevronRight, RotateCcw, List, Plus, Folder, Trash2, X, Loader2, Bookmark as BookmarkIcon, Check as CheckIcon, Edit } from 'lucide-react';
+import { useMetadata } from '../contexts/MetadataContext';
+import { useAuth } from '../contexts/AuthContext';
+import { db } from '../firebase';
+import { collection, getDocs, query, where, orderBy, limit, startAfter, DocumentSnapshot, endBefore, limitToLast, doc, getDoc, documentId, addDoc, serverTimestamp, deleteDoc, writeBatch, arrayRemove, onSnapshot, Query, DocumentData } from 'firebase/firestore';
+import { Question, Submission, QuestionList } from '../data/mockData';
+import { PracticeSkeleton } from '../components/Skeletons';
 
-const PAGE_SIZE = 10; // For server-side paginated "All Questions"
+const PAGE_SIZE = 10;
 const CLIENT_PAGE_SIZE = 10; // For client-side paginated lists
 
-// --- NEW: Question Lists Sidebar ---
+// --- Question Lists Sidebar (No changes) ---
 const QuestionListsSidebar = ({
     selectedListId,
     onSelectList,
@@ -198,7 +196,6 @@ const QuestionListsSidebar = ({
         </div>
     );
 };
-
 const SidebarItem = ({ label, icon, isActive, onClick, onDelete }: {
     label: string,
     icon: React.ReactNode,
@@ -231,44 +228,41 @@ const SidebarItem = ({ label, icon, isActive, onClick, onDelete }: {
 );
 
 
-// --- MAIN PRACTICE COMPONENT (REFACTORED) ---
+// --- MAIN PRACTICE COMPONENT (REVERTED TO SERVER-SIDE FILTERING) ---
 export function Practice() {
     const { user, userInfo, loading: authLoading } = useAuth();
-    const { metadata, loading: metadataLoading } = useMetadata();
+    const { metadata, loading: metadataLoading, questionCollectionPath, availableBranches, selectedBranch } = useMetadata();
     const location = useLocation();
 
     // Filter and Sort State
     const [searchQuery, setSearchQuery] = useState('');
-    // const [difficultyFilter, setDifficultyFilter] = useState<string>('all'); // REMOVED
     const [questionTypeFilter, setQuestionTypeFilter] = useState<string>('all');
     const [topicFilter, setTopicFilter] = useState<string>('all');
     const [subjectFilter, setSubjectFilter] = useState<string>(location.state?.subject || 'all');
     const [yearFilter, setYearFilter] = useState<string>('all');
     const [tagFilter, setTagFilter] = useState<string>('all');
-    const [sortOrder, setSortOrder] = useState<string>('default');
+    // --- *** NEW: Updated default sort order *** ---
+    const [sortOrder, setSortOrder] = useState<string>('qIndex-asc');
 
     // List selection state
     const [selectedListId, setSelectedListId] = useState<string | null>(null);
-    // *** NEW STATE ***: Holds the full list of IDs (e.g., 1000 IDs)
-    const [listQuestionIds, setListQuestionIds] = useState<string[]>([]); 
+    const [listQuestionIds, setListQuestionIds] = useState<string[]>([]);
 
     // Data State
-    const [questions, setQuestions] = useState<Question[]>([]); // For 'All Questions' (paginated)
-    // *** MODIFIED ***: Holds only the CURRENT PAGE of list questions (e.g., 10 questions)
-    const [listQuestions, setListQuestions] = useState<Question[]>([]); 
+    const [questions, setQuestions] = useState<Question[]>([]);
+    const [listQuestions, setListQuestions] = useState<Question[]>([]);
     
     const [submissions, setSubmissions] = useState<Submission[]>([]);
     const [loadingData, setLoadingData] = useState(true);
-    const [loadingMore, setLoadingMore] = useState(false); // For 'All Questions' pagination
+    const [loadingMore, setLoadingMore] = useState(false);
     const [queryError, setQueryError] = useState('');
 
     // Pagination State
     const [currentPage, setCurrentPage] = useState(1);
-    const [firstVisible, setFirstVisible] = useState<DocumentSnapshot | null>(null); // For server pagination
-    const [lastVisible, setLastVisible] = useState<DocumentSnapshot | null>(null); // For server pagination
-    const [totalQuestions, setTotalQuestions] = useState(0); 
+    const [firstVisible, setFirstVisible] = useState<DocumentSnapshot | null>(null);
+    const [lastVisible, setLastVisible] = useState<DocumentSnapshot | null>(null);
+    const [totalQuestions, setTotalQuestions] = useState(0);
 
-    // Derive filter options and count from metadata
     const subjects = useMemo(() => metadata?.subjects || [], [metadata]);
     const topics = useMemo(() => metadata?.topics || [], [metadata]);
     const years = useMemo(() => metadata?.years || [], [metadata]);
@@ -280,40 +274,53 @@ export function Practice() {
     
     const filtersAreActive = useMemo(() => {
         return (
-            // difficultyFilter !== 'all' || // REMOVED
             questionTypeFilter !== 'all' ||
             subjectFilter !== 'all' ||
             topicFilter !== 'all' ||
             yearFilter !== 'all' ||
             tagFilter !== 'all'
         );
-    }, [questionTypeFilter, subjectFilter, topicFilter, yearFilter, tagFilter]); // REMOVED dependency
+    }, [questionTypeFilter, subjectFilter, topicFilter, yearFilter, tagFilter]);
     
     const listMode = selectedListId !== null;
 
-
-    // --- REFACTORED: Fetch paginated questions (only for "All Questions" mode) ---
+    // --- *** UPDATED: server-side fetchPaginatedQuestions *** ---
     const fetchPaginatedQuestions = useCallback(async (page: number, direction: 'next' | 'prev' | 'first' = 'first') => {
-        console.log(`[Practice.LoadQuestions] Fetching 'All Questions' page: ${page}, direction: ${direction}`);
+        if (!metadata) {
+             console.log("[Practice.LoadQuestions] Waiting for metadata...");
+             setLoadingData(true);
+             return;
+        }
+
+        console.log(`[Practice.LoadQuestions] Fetching 'All Questions' (Branch: ${selectedBranch}) page: ${page}, direction: ${direction}`);
         if (direction === 'first') setLoadingData(true);
         else setLoadingMore(true);
         setQueryError('');
-        setListQuestions([]); // Clear list questions
-        setListQuestionIds([]); // Clear list IDs
+        setListQuestions([]);
+        setListQuestionIds([]);
 
         try {
-            let q = query(collection(db, "questions"));
+            let q: Query<DocumentData, DocumentData> = query(collection(db, questionCollectionPath));
             
+            // 1. Start with base 'verified' filter for non-admins
             let baseFilters: any[] = []; 
             if (userInfo?.role !== 'admin' && userInfo?.role !== 'moderator') {
                 baseFilters.push(where("verified", "==", true));
             }
-            // if (difficultyFilter !== 'all') baseFilters.push(where('difficulty', '==', difficultyFilter)); // REMOVED
-            if (questionTypeFilter !== 'all') baseFilters.push(where('question_type', '==', questionTypeFilter));
-            if (subjectFilter !== 'all') baseFilters.push(where('subject', '==', subjectFilter));
-            if (topicFilter !== 'all') baseFilters.push(where('topic', '==', topicFilter));
-            if (yearFilter !== 'all') baseFilters.push(where('year', '==', yearFilter));
-            if (tagFilter !== 'all') baseFilters.push(where('tags', 'array-contains', tagFilter));
+
+            // 2. Check for the "poison pill" array-contains filter
+            if (tagFilter !== 'all') {
+                // If 'tags' filter is active, we can ONLY add this filter.
+                // We ignore subject, topic, and year filters.
+                console.log(`[Practice.LoadQuestions] Applying 'tags' filter. Other filters (subject, topic, year) will be ignored.`);
+                baseFilters.push(where('tags', 'array-contains', tagFilter));
+            } else {
+                // If 'tags' filter is NOT active, we can add the other filters.
+                if (questionTypeFilter !== 'all') baseFilters.push(where('question_type', '==', questionTypeFilter));
+                if (subjectFilter !== 'all') baseFilters.push(where('subject', '==', subjectFilter));
+                if (topicFilter !== 'all') baseFilters.push(where('topic', '==', topicFilter));
+                if (yearFilter !== 'all') baseFilters.push(where('year', '==', yearFilter));
+            }
 
             if(baseFilters.length > 0) {
                 console.log(`[Practice.LoadQuestions] Applying ${baseFilters.length} filters.`);
@@ -330,20 +337,29 @@ export function Practice() {
                 }
             }
             
+            // --- *** 3. Apply Sorting (NOW SORTS BY qIndex) *** ---
             switch (sortOrder) {
-                // case 'difficulty-asc': q = query(q, orderBy('difficulty')); break; // REMOVED
-                // case 'difficulty-desc': q = query(q, orderBy('difficulty', 'desc')); break; // REMOVED
                 case 'year-desc': q = query(q, orderBy('year', 'desc')); break;
                 case 'year-asc': q = query(q, orderBy('year', 'asc')); break;
-                case 'default': default: q = query(q, orderBy('title')); break;
+                case 'qIndex-desc': q = query(q, orderBy('qIndex', 'desc')); break;
+                case 'qIndex-asc': // Default case
+                default: 
+                    q = query(q, orderBy('qIndex', 'asc')); 
+                    break;
             }
 
+            // 4. Apply Pagination
             if (direction === 'next' && lastVisible) q = query(q, startAfter(lastVisible), limit(PAGE_SIZE));
             else if (direction === 'prev' && firstVisible) q = query(q, endBefore(firstVisible), limitToLast(PAGE_SIZE));
             else q = query(q, limit(PAGE_SIZE));
 
+            console.log(
+                `[Practice.LoadQuestions] DIAGNOSTIC: About to run getDocs(). Filters active: ${filtersAreActive}. Sort: ${sortOrder}. Page: ${page}. Limit: ${PAGE_SIZE}.`
+            );
+
             console.log(`[Practice.LoadQuestions] Fetching documents for page ${page}... (${PAGE_SIZE} READS MAX)`);
             const documentSnapshots = await getDocs(q);
+            
             const questionsData = documentSnapshots.docs.map(doc => ({ id: doc.id, ...doc.data() } as Question));
             console.log(`[Practice.LoadQuestions] SUCCESS: Received ${questionsData.length} documents.`);
             setQuestions(direction === 'prev' ? questionsData.reverse() : questionsData);
@@ -364,7 +380,7 @@ export function Practice() {
         } catch (error: any) {
             console.error("[Practice.LoadQuestions] FATAL ERROR fetching questions:", error);
             if (error.code === 'failed-precondition') {
-                setQueryError(`Firestore query failed because a database index is missing. This usually happens when you combine filters and sorting. Open your browser's developer console for a link to create the required index automatically.`);
+                setQueryError(`Query failed: This combination of filters and sorting requires a new database index. Please open your browser's developer console (F12) to find a link to create the missing index in Firebase. Error: ${error.message}`);
             } else {
                 setQueryError('An unexpected error occurred while fetching questions.');
             }
@@ -373,99 +389,89 @@ export function Practice() {
             setLoadingData(false);
             setLoadingMore(false);
         }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [questionTypeFilter, subjectFilter, topicFilter, yearFilter, tagFilter, sortOrder, userInfo?.role, lastVisible, firstVisible, filtersAreActive, baseTotalQuestions]); // REMOVED dependency
+    }, [questionTypeFilter, subjectFilter, topicFilter, yearFilter, tagFilter, sortOrder, userInfo?.role, lastVisible, firstVisible, filtersAreActive, baseTotalQuestions, metadata, selectedBranch, questionCollectionPath]);
 
 
-    // --- *** MODIFIED EFFECT (was fetchListQuestions) *** ---
-    // This effect now ONLY fetches the LIST OF IDs when the list selection changes.
+    // --- Effect for list selection (FIXED) ---
     useEffect(() => {
         const fetchListIds = async () => {
             if (!isAuthenticated || !user) {
                 console.log("[Practice.LoadList] No authenticated user. Clearing list.");
                 setListQuestionIds([]);
+                setListQuestions([]); // Clear list questions
                 return;
             }
 
-            // Switched to "All Questions" mode
             if (selectedListId === null) {
-                console.log("[Practice.LoadList] List ID is null. Deferring to 'All Questions'.");
+                console.log("[Practice.LoadList] List ID is null. Clearing list state.");
                 setListQuestionIds([]);
                 setListQuestions([]);
-                // Trigger refetch of "All Questions" page 1
-                fetchPaginatedQuestions(1, 'first');
+                // The other useEffect (for filters/sort) will now handle fetching "All Questions"
                 return;
             }
 
-            // A list IS selected. Fetch its IDs.
             setLoadingData(true);
             setQueryError('');
-            setQuestions([]); // Clear paginated questions
-            setListQuestions([]); // Clear old list page
+            setQuestions([]); // Clear the "All Questions" state
+            setListQuestions([]);
             console.log(`[Practice.LoadList] Fetching IDs for List ID: '${selectedListId}'`);
 
             try {
                 let questionIds: string[] = [];
                 if (selectedListId === 'favorites') {
-                    console.log("[Practice.LoadList] 'Favorites' selected. Fetching 'questionLists/favorites' doc... (1 READ)");
                     const listDoc = await getDoc(doc(db, `users/${user.uid}/questionLists`, 'favorites'));
                     if (listDoc.exists()) {
                         questionIds = (listDoc.data() as QuestionList).questionIds || [];
-                    } else {
-                        console.log("[Practice.LoadList] 'favorites' document does not exist yet.");
-                        questionIds = [];
                     }
                 } else {
-                    console.log(`[Practice.LoadList] Custom list selected. Fetching 'questionLists/${selectedListId}' doc... (1 READ)`);
                     const listDoc = await getDoc(doc(db, `users/${user.uid}/questionLists`, selectedListId));
                     if (listDoc.exists()) {
                         questionIds = (listDoc.data() as QuestionList).questionIds || [];
                     }
                 }
                 
-                console.log(`[Practice.LoadList] Found ${questionIds.length} question IDs in list doc.`);
-                setListQuestionIds(questionIds); // <-- SET THE FULL ID ARRAY
-                setTotalQuestions(questionIds.length); // <-- Set total count for the list
-                setCurrentPage(1); // <-- Reset to page 1
+                setListQuestionIds(questionIds);
+                setTotalQuestions(questionIds.length);
+                setCurrentPage(1); // Reset to page 1 for the new list
 
             } catch (error) {
                 console.error(`[Practice.LoadList] FATAL ERROR fetching list '${selectedListId}':`, error);
                 setQueryError("Failed to load questions for this list.");
                 setListQuestionIds([]);
                 setTotalQuestions(0);
-            } finally {
-                // Loading is not false here, the *next* effect will set it false
             }
         };
         
-        if (!metadataLoading) { // Only run when metadata is ready
-            console.log("[Practice] List selection changed. Triggering ID fetch...");
+        if (!metadataLoading) {
+            console.log("[Practice] List selection or branch changed. Triggering ID fetch...");
             fetchListIds();
         } else {
             console.log("[Practice] Waiting for metadata to load before fetching list IDs...");
         }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [selectedListId, isAuthenticated, user, metadataLoading]); // This runs when the list selection changes
+    // FIXED: Removed fetchPaginatedQuestions from dependencies to break loop
+    }, [selectedListId, isAuthenticated, user, metadataLoading, selectedBranch]);
 
 
-    // --- *** NEW EFFECT *** ---
-    // This effect fetches the questions for the CURRENT PAGE of the selected list.
-    // It runs when the page changes OR when the list of IDs is first loaded.
+    // --- Effect for fetching paginated LIST question data ---
     useEffect(() => {
         const fetchQuestionsForCurrentPage = async () => {
             if (!listMode || listQuestionIds.length === 0) {
-                // Not in list mode, or the selected list is empty
                 setListQuestions([]);
-                if (listMode) setLoadingData(false); // List is empty, stop loading
+                if (listMode) setLoadingData(false);
+                return;
+            }
+            
+            if (metadataLoading || !questionCollectionPath) {
+                console.log("[Practice.ListPager] Waiting for metadata/collection path...");
+                setLoadingData(true);
                 return;
             }
 
-            console.log(`[Practice.ListPager] Fetching page ${currentPage} of list '${selectedListId}'`);
+            console.log(`[Practice.ListPager] Fetching page ${currentPage} of list '${selectedListId}' from ${questionCollectionPath}`);
             setLoadingData(true);
             setQueryError('');
             
             try {
-                // 1. Slice the IDs for the current page
                 const startIndex = (currentPage - 1) * CLIENT_PAGE_SIZE;
                 const endIndex = startIndex + CLIENT_PAGE_SIZE;
                 const idsToFetch = listQuestionIds.slice(startIndex, endIndex);
@@ -477,9 +483,8 @@ export function Practice() {
                     return;
                 }
 
-                console.log(`[Practice.ListPager] Found ${idsToFetch.length} IDs for page ${currentPage}. Fetching... (${idsToFetch.length} READS)`);
+                console.log(`[Practice.ListPager] Found ${idsToFetch.length} IDs for page ${currentPage}. Fetching... (${idsToFetch.length} READS MAX)`);
                 
-                // 2. Fetch only those documents (using the same chunking logic)
                 const questionData: Question[] = [];
                 const chunks: string[][] = [];
                 for (let i = 0; i < idsToFetch.length; i += 30) {
@@ -489,7 +494,7 @@ export function Practice() {
                 for (const chunk of chunks) {
                     if(chunk.length === 0) continue;
                     
-                    let qQuery = query(collection(db, "questions"), where(documentId(), 'in', chunk));
+                    let qQuery = query(collection(db, questionCollectionPath), where(documentId(), 'in', chunk));
                     if (userInfo?.role !== 'admin' && userInfo?.role !== 'moderator') {
                         qQuery = query(qQuery, where("verified", "==", true));
                     }
@@ -508,7 +513,7 @@ export function Practice() {
                     });
                 }
                 
-                setListQuestions(questionData); // <-- Set the 10 questions for the current page
+                setListQuestions(questionData);
                 
             } catch (error) {
                 console.error(`[Practice.ListPager] FATAL ERROR fetching questions for page ${currentPage}:`, error);
@@ -520,22 +525,21 @@ export function Practice() {
         };
 
         fetchQuestionsForCurrentPage();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [currentPage, listQuestionIds, listMode, userInfo?.role]); // Runs when page or ID list changes
+    }, [currentPage, listQuestionIds, listMode, userInfo?.role, metadataLoading, questionCollectionPath]);
 
 
-    // Effect for filter/sort changes (ONLY for "All Questions")
+    // --- Effect for filter/sort changes (FIXED) ---
     useEffect(() => {
         if (selectedListId === null && !metadataLoading) {
-            console.log("[Practice] Filters or sort changed for 'All Questions'. Refetching page 1.");
+            console.log("[Practice] Filters, sort, or branch changed (or list deselected). Refetching 'All Questions' page 1.");
             setLastVisible(null);
             setFirstVisible(null);
             fetchPaginatedQuestions(1, 'first');
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [questionTypeFilter, subjectFilter, topicFilter, yearFilter, tagFilter, sortOrder, userInfo?.role]); // REMOVED dependency
+    }, [questionTypeFilter, subjectFilter, topicFilter, yearFilter, tagFilter, sortOrder, userInfo?.role, selectedBranch, metadataLoading, selectedListId]);
 
-    // Fetch user submissions (real-time)
+    // Fetch user submissions (real-time) - No change
     useEffect(() => {
         if (user) {
             console.log(`[Practice.Submissions] User ${user.uid}: Subscribing to submissions... (1 listener)`);
@@ -549,7 +553,7 @@ export function Practice() {
             });
             return () => {
                 console.log("[Practice.Submissions] Unsubscribing from submissions.");
-                unsubscribe(); // Detach listener
+                unsubscribe();
             };
         } else {
             console.log("[Practice.Submissions] No user, clearing submissions.");
@@ -557,7 +561,7 @@ export function Practice() {
         }
     }, [user]);
 
-    // Handle location state for subject filter
+    // Handle location state for subject filter - No change
     useEffect(() => {
         if (location.state?.subject && location.state.subject !== subjectFilter) {
             console.log(`[Practice] Applying subject filter from navigation state: ${location.state.subject}`);
@@ -567,7 +571,7 @@ export function Practice() {
         }
     }, [location.state, subjectFilter]);
 
-    // Server-side Pagination Handlers
+    // --- Server-side Pagination Handlers ---
     const handleNextPage = () => {
         const hasMore = filtersAreActive
             ? lastVisible 
@@ -583,9 +587,8 @@ export function Practice() {
         }
     };
     
-    // Client-side Pagination Handlers (FOR LISTS)
+    // --- Client-side Pagination Handlers ---
     const handleClientNextPage = () => {
-        // totalQuestions is set to listQuestionIds.length
         const totalPages = Math.max(1, Math.ceil(totalQuestions / CLIENT_PAGE_SIZE)); 
         if (currentPage < totalPages) {
             setCurrentPage(currentPage + 1);
@@ -597,20 +600,19 @@ export function Practice() {
         }
     };
 
-
-    // Filter Reset Handler
+    // Filter Reset Handler (No change)
     const handleResetFilters = () => {
         console.log("[Practice] Resetting all filters.");
         setSearchQuery('');
-        // setDifficultyFilter('all'); // REMOVED
         setQuestionTypeFilter('all');
         setTopicFilter('all');
         setSubjectFilter('all');
         setYearFilter('all');
         setTagFilter('all');
-        setSortOrder('default');
+        // --- *** NEW: Reset sort order to qIndex-asc *** ---
+        setSortOrder('qIndex-asc');
         if(selectedListId !== null) {
-            setSelectedListId(null); // This will trigger refetch via useEffect
+            setSelectedListId(null);
         }
     };
 
@@ -619,14 +621,11 @@ export function Practice() {
         [submissions]
     );
     
-    // *** MODIFIED ***: This now filters/sorts ONLY the current page of list questions
+    // --- *** NEW: Updated client-side sort logic *** ---
     const clientFilteredQuestions = useMemo(() => {
-        let questionsToFilter = [...listQuestions]; // Clone (e.g., 10 questions)
+        let questionsToFilter = [...listQuestions];
         
-        // Client-side filtering (applies to current page only)
-        // if (difficultyFilter !== 'all') { // REMOVED
-        //     questionsToFilter = questionsToFilter.filter(q => q.difficulty === difficultyFilter);
-        // }
+        // ... (filtering logic is unchanged) ...
         if (questionTypeFilter !== 'all') {
             questionsToFilter = questionsToFilter.filter(q => q.question_type === questionTypeFilter);
         }
@@ -643,17 +642,17 @@ export function Practice() {
             questionsToFilter = questionsToFilter.filter(q => q.tags?.includes(tagFilter));
         }
         
+        // Sort logic updated to use qIndex
         questionsToFilter.sort((a, b) => {
+            const aIndex = a.qIndex || 0;
+            const bIndex = b.qIndex || 0;
             switch (sortOrder) {
-            // case 'difficulty-asc': // REMOVED
-            //     const diffMap: Record<string, number> = { 'Easy': 1, 'Medium': 2, 'Hard': 3 };
-            //     return (diffMap[a.difficulty] || 0) - (diffMap[b.difficulty] || 0);
-            // case 'difficulty-desc': // REMOVED
-            //     const diffMapDesc: Record<string, number> = { 'Easy': 1, 'Medium': 2, 'Hard': 3 };
-            //     return (diffMapDesc[b.difficulty] || 0) - (diffMapDesc[a.difficulty] || 0);
-            case 'year-desc': return (b.year || '').localeCompare(a.year || '');
-            case 'year-asc': return (a.year || '').localeCompare(b.year || '');
-            case 'default': default: return (a.title || '').localeCompare(b.title || '');
+                case 'year-desc': return (b.year || '').localeCompare(a.year || '');
+                case 'year-asc': return (a.year || '').localeCompare(b.year || '');
+                case 'qIndex-desc': return bIndex - aIndex;
+                case 'qIndex-asc': // Default case
+                default:
+                    return aIndex - bIndex;
             }
         });
         
@@ -663,11 +662,12 @@ export function Practice() {
             q.id?.toLowerCase().includes(lowerCaseQuery) ||
             q.topic?.toLowerCase().includes(lowerCaseQuery) ||
             q.subject?.toLowerCase().includes(lowerCaseQuery) ||
-            q.title?.toLowerCase().includes(lowerCaseQuery)
+            q.title?.toLowerCase().includes(lowerCaseQuery) ||
+            q.qIndex?.toString().includes(lowerCaseQuery) // Search by number
         );
-    }, [listQuestions, sortOrder, searchQuery, questionTypeFilter, subjectFilter, topicFilter, yearFilter, tagFilter]); // REMOVED dependency
+    }, [listQuestions, sortOrder, searchQuery, questionTypeFilter, subjectFilter, topicFilter, yearFilter, tagFilter]);
 
-    // This memo is for "All Questions" mode and is correct
+    // --- Updated server-side search to include qIndex ---
     const serverPagedAndFilteredQuestions = useMemo(() => {
         if (!searchQuery) return questions;
         const lowerCaseQuery = searchQuery.toLowerCase();
@@ -675,25 +675,20 @@ export function Practice() {
             q.id?.toLowerCase().includes(lowerCaseQuery) ||
             q.topic?.toLowerCase().includes(lowerCaseQuery) ||
             q.subject?.toLowerCase().includes(lowerCaseQuery) ||
-            q.title?.toLowerCase().includes(lowerCaseQuery)
+            q.title?.toLowerCase().includes(lowerCaseQuery) ||
+            q.qIndex?.toString().includes(lowerCaseQuery) // Search by number
         );
     }, [searchQuery, questions]);
     
-    // This memo is correct, it switches between the two lists
     const questionsToDisplay = useMemo(() => {
         if (selectedListId !== null) {
             return clientFilteredQuestions;
         }
         return serverPagedAndFilteredQuestions;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedListId, clientFilteredQuestions, serverPagedAndFilteredQuestions]);
     
-    // This effect is no longer needed
-    // useEffect(() => { ... }, [clientFilteredQuestions, selectedListId]); 
-
-
-    // const getDifficultyColor = (difficulty: string | undefined) => { ... }; // REMOVED
     
+    // getQuestionTypeColor (No change)
     const getQuestionTypeColor = (type: string | undefined) => {
         switch (type) {
         case 'mcq': return 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/50';
@@ -703,13 +698,11 @@ export function Practice() {
         }
     };
 
-    // --- FIX: Calculate totalPages based on mode ---
     const totalPages = Math.max(
         1,
         Math.ceil(
         (listMode)
-            ? totalQuestions / CLIENT_PAGE_SIZE // Client-side (list)
-            // Use baseTotalQuestions for server-side, as totalQuestions is the same
+            ? totalQuestions / CLIENT_PAGE_SIZE
             : baseTotalQuestions / PAGE_SIZE 
         )
     );
@@ -718,6 +711,8 @@ export function Practice() {
         console.log(`[Practice] Rendering SKELETON (authLoading: ${authLoading}, metadataLoading: ${metadataLoading})`);
         return <PracticeSkeleton />;
     }
+    
+    const branchName = availableBranches[selectedBranch] || 'Practice';
 
     // --- Render Actual Page Content ---
     return (
@@ -728,7 +723,6 @@ export function Practice() {
                     selectedListId={selectedListId}
                     onSelectList={(listId) => {
                         setSelectedListId(listId);
-                        // setCurrentPage(1); // No longer needed, useEffect[selectedListId] handles this
                     }}
                     userId={user?.uid || null}
                 />
@@ -737,17 +731,15 @@ export function Practice() {
                     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
                         <div className="mb-8">
                             <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-                                Practice Questions
+                                Practice Questions ({branchName})
                             </h1>
                             <p className="text-gray-600 dark:text-gray-400">
                                 {loadingData ? 'Loading...' : (
                                     (totalQuestions > 0 || listMode) && !queryError
                                     ? listMode
-                                        // We know the total for lists (client-side)
                                         ? `Showing ${ (currentPage - 1) * CLIENT_PAGE_SIZE + 1 }-${ Math.min(currentPage * CLIENT_PAGE_SIZE, totalQuestions) } of ${totalQuestions} questions in this list`
                                         : (filtersAreActive && totalQuestions === baseTotalQuestions && questionsToDisplay.length === 0)
                                             ? `Searching questions...`
-                                            // We know the total for "All Questions" (server-side, filtered or not)
                                             : `Showing ${ (currentPage - 1) * PAGE_SIZE + 1 }-${ (currentPage - 1) * PAGE_SIZE + questionsToDisplay.length } of ${filtersAreActive ? '~' : ''}${baseTotalQuestions} questions`
                                     : queryError ? 'Error loading questions' : '0 questions found'
                                 )}
@@ -760,7 +752,7 @@ export function Practice() {
                                     <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
                                     <input
                                         type="text"
-                                        placeholder="Search questions by title, subject, topic..."
+                                        placeholder="Search by number, title, subject..."
                                         value={searchQuery}
                                         onChange={(e) => setSearchQuery(e.target.value)}
                                         className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
@@ -769,8 +761,6 @@ export function Practice() {
 
                                 <div className="flex flex-wrap items-center gap-2 text-sm">
                                     <Filter className="w-5 h-5 text-gray-400 flex-shrink-0 hidden sm:inline-block" />
-
-                                    {/* <select value={difficultyFilter} ... > ... </select> */} {/* REMOVED */}
                                     
                                     <select disabled={filtersDisabled} value={questionTypeFilter} onChange={(e) => setQuestionTypeFilter(e.target.value)} className="w-full sm:w-auto px-2 py-1 border border-gray-300 dark:border-gray-700 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-white appearance-none cursor-pointer disabled:opacity-50 disabled:bg-gray-100 dark:disabled:bg-gray-800">
                                         <option value="all">Type</option>
@@ -801,12 +791,12 @@ export function Practice() {
 
                                     <div className="flex-grow"></div>
 
+                                    {/* --- *** NEW: Updated Sort Options *** --- */}
                                     <div className="flex items-center gap-2 mt-2 sm:mt-0 w-full sm:w-auto">
                                         <ArrowDownUp className="w-5 h-5 text-gray-400 flex-shrink-0" />
                                         <select value={sortOrder} onChange={(e) => setSortOrder(e.target.value)} className="w-full sm:w-auto px-2 py-1 border border-gray-300 dark:border-gray-700 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-white appearance-none cursor-pointer">
-                                            <option value="default">Sort: Title</option>
-                                            {/* <option value="difficulty-asc">Difficulty ↑</option> */}{/* REMOVED */}
-                                            {/* <option value="difficulty-desc">Difficulty ↓</option> */}{/* REMOVED */}
+                                            <option value="qIndex-asc">Sort: Number ↑</option>
+                                            <option value="qIndex-desc">Sort: Number ↓</option>
                                             <option value="year-desc">Year ↓</option>
                                             <option value="year-asc">Year ↑</option>
                                         </select>
@@ -821,7 +811,6 @@ export function Practice() {
 
                         {queryError && (
                             <div className="text-center py-8 px-4 my-6 bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-800 rounded-lg">
-                                {/* <AlertTriangle className="w-6 h-6 text-red-500 dark:text-red-400"/> */}{/* Removed to fix warning */}
                                 <h3 className="text-red-800 dark:text-red-300 font-semibold text-lg">Error</h3>
                                 <p className="text-red-600 dark:text-red-400 mt-2 max-w-2xl mx-auto text-sm">{queryError}</p>
                             </div>
@@ -838,6 +827,8 @@ export function Practice() {
                                         <div key={question.id} className="block px-4 py-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
                                             <Link to={`/question/${question.id}`} className="block mb-1">
                                                 <span className="text-blue-600 dark:text-blue-400 font-medium text-base truncate">
+                                                    {/* --- *** NEW: Show qIndex *** --- */}
+                                                    <span className="text-sm text-gray-500 dark:text-gray-400 font-normal mr-2">#{question.qIndex}</span>
                                                     {question.title || `Question ${question.id.substring(0,4)}...`}
                                                 </span>
                                             </Link>
@@ -852,9 +843,6 @@ export function Practice() {
                                                 </span>
                                             </div>
                                             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-                                                {/* <span className={`px-2 py-0.5 rounded-full font-medium ${getDifficultyColor(question.difficulty)}`}>
-                                                    {question.difficulty || '?'}
-                                                </span> */}{/* REMOVED */}
                                                 <span className={`px-2 py-0.5 rounded-full font-medium uppercase ${getQuestionTypeColor(question.question_type)}`}>
                                                     {question.question_type || 'N/A'}
                                                 </span>
@@ -888,10 +876,11 @@ export function Practice() {
                                     <thead className="bg-gray-50 dark:bg-gray-800">
                                         <tr>
                                             <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap">Status</th>
+                                            {/* --- *** NEW: Added Q.No. *** --- */}
+                                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap">Q.No.</th>
                                             <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap">Title</th>
                                             <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap">Topic</th>
                                             <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap">Type</th>
-                                            {/* <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap">Difficulty</th> */}{/* REMOVED */}
                                             {(userInfo?.role === 'admin' || userInfo?.role === 'moderator') && <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap">Verified</th>}
                                             <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap">Details</th>
                                             {(userInfo?.role === 'admin' || userInfo?.role === 'moderator') && <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap">Actions</th>}
@@ -903,10 +892,11 @@ export function Practice() {
                                             return (
                                                 <tr key={question.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
                                                     <td className="px-6 py-4 whitespace-nowrap text-center">{isSolved ? <CheckCircle className="w-5 h-5 text-green-500 inline-block" /> : <Circle className="w-5 h-5 text-gray-300 dark:text-gray-700 inline-block" />}</td>
+                                                    {/* --- *** NEW: Show qIndex *** --- */}
+                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{question.qIndex}</td>
                                                     <td className="px-6 py-4 whitespace-nowrap"><Link to={`/question/${question.id}`} className="text-blue-600 dark:text-blue-400 hover:underline font-medium text-sm">{question.title || `Question ${question.id.substring(0,4)}...`}</Link></td>
                                                     <td className="px-6 py-4 whitespace-nowrap"><span className="text-gray-900 dark:text-white text-sm">{question.topic || 'N/A'}</span></td>
                                                     <td className="px-6 py-4 whitespace-nowrap"><span className={`px-3 py-1 rounded-full text-xs font-medium uppercase ${getQuestionTypeColor(question.question_type)}`}>{question.question_type || 'N/A'}</span></td>
-                                                    {/* <td className="px-6 py-4 whitespace-nowrap"><span className={`px-3 py-1 rounded-full text-xs font-medium ${getDifficultyColor(question.difficulty)}`}>{question.difficulty || '?'}</span></td> */}{/* REMOVED */}
                                                     {(userInfo?.role === 'admin' || userInfo?.role === 'moderator') && <td className="px-6 py-4 whitespace-nowrap"><span className={`px-3 py-1 rounded-full text-xs font-medium ${question.verified ? 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-200' : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-200'}`}>{question.verified ? 'Yes' : 'No'}</span></td>}
                                                     <td className="px-6 py-4 whitespace-nowrap"><div className="flex flex-wrap gap-1"><span className="px-2 py-1 bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-200 rounded text-xs font-medium">{question.subject || 'N/A'}</span><span className="px-2 py-1 bg-gray-100 dark:bg-gray-700/50 text-gray-700 dark:text-gray-300 rounded text-xs">{question.year || '?'}</span></div></td>
                                                     {(userInfo?.role === 'admin' || userInfo?.role === 'moderator') && <td className="px-6 py-4 whitespace-nowrap"><Link to={`/edit-question/${question.id}`} className="text-blue-600 hover:text-blue-900 flex items-center gap-1 text-sm font-medium"><Edit className="w-4 h-4" /> Edit</Link></td>}

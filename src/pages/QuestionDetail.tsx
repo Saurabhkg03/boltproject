@@ -1,38 +1,27 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, CheckCircle, XCircle, Loader2, BookOpen, Bookmark, Calendar, RefreshCcw, Save, Timer as TimerIcon, Play, Pause, LogIn, Check as CheckIcon, X as XIcon, FolderPlus, ListPlus, RotateCcw, ClipboardList } from 'lucide-react';
+import { ArrowLeft, ArrowRight, CheckCircle, XCircle, Loader2, BookOpen, Bookmark, Calendar, RefreshCcw, Save, Timer as TimerIcon, Play, Pause, LogIn, Check as CheckIcon, X as XIcon, FolderPlus, ListPlus, RotateCcw, ClipboardList, ExternalLink } from 'lucide-react';
 
-import { doc, getDoc, setDoc, collection, getDocs, updateDoc, deleteDoc, arrayUnion, arrayRemove, query, serverTimestamp, writeBatch, orderBy, addDoc } from 'firebase/firestore';
-import { db } from '../firebase';
-import { useAuth } from '../contexts/AuthContext';
-import { Question, Submission, UserQuestionData, QuestionList } from '../data/mockData';
-// --- IMPORT THE METADATA HOOK ---
-import { useMetadata } from '../contexts/MetadataContext';
+import { doc, getDoc, setDoc, collection, getDocs, arrayUnion, arrayRemove, query, serverTimestamp, writeBatch, orderBy, addDoc } from 'firebase/firestore';
+// --- FIX: Add .ts/.tsx extensions to imports ---
+import { db } from '../firebase.ts';
+import { useAuth } from '../contexts/AuthContext.tsx';
+import { Question, Submission, UserQuestionData, QuestionList, UserStats, UserStreakData } from '../data/mockData.ts';
+import { useMetadata } from '../contexts/MetadataContext.tsx';
 
-// Declare KaTeX auto-render function from the global scope
 declare global {
   interface Window {
     renderMathInElement: (element: HTMLElement, options: any) => void;
   }
 }
 
-// --- UTILITY FUNCTIONS ---
-
 const RATING_SCALING_FACTOR = 100;
-
-/**
- * Calculates the user's performance rating.
- */
 const calculateRating = (accuracy: number | undefined, correct: number | undefined): number => {
     const safeAccuracy = accuracy ?? 0;
     const safeCorrect = correct ?? 0;
     const rating = Math.max(0, (safeAccuracy / 100) * Math.log10(safeCorrect + 1) * RATING_SCALING_FACTOR);
     return parseFloat(rating.toFixed(2));
 };
-
-/**
- * Formats a Date object to 'YYYY-MM-DD' string.
- */
 function formatDate(date: Date | string): string | null {
     if (!(date instanceof Date)) {
         try {
@@ -45,38 +34,58 @@ function formatDate(date: Date | string): string | null {
     }
     return date.toISOString().split('T')[0];
 }
-
-/**
- * Calculates the difference in days between two dates.
- */
 function getDayDiff(date1: Date, date2: Date): number {
-    const d1 = new Date(date1.toDateString()); // Normalize to start of day
-    const d2 = new Date(date2.toDateString()); // Normalize to start of day
+    const d1 = new Date(date1.toDateString());
+    const d2 = new Date(date2.toDateString());
     const diffTime = Math.abs(d1.getTime() - d2.getTime());
     return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 }
-
+// --- UPDATED: Function to handle lazy-loaded images ---
 const extractAndCleanHtml = (html: string, contentClass?: string): string => {
   if (!html) return '';
+  
+  // 1. Remove noscript tags
   let clean = html.replace(/<noscript>[\s\S]*?<\/noscript>/gi, '');
-  clean = clean.replace(/<img[^>]*>/gi, '');
+
+  // 2. Fix lazy-loaded images
+  // Find <img ... data-src="REAL_SRC" ... src="PLACEHOLDER_SRC" ...>
+  // and replace PLACEHOLDER_SRC with REAL_SRC
+  clean = clean.replace(
+    /(<img[^>]*?data-src=(["']))(.*?)\2([^>]*?src=(["']))(.*?)\5/gi,
+    (match, part1, quote, dataSrcValue, part2, part3, oldSrcValue) => {
+      // Reconstruct the img tag, replacing the value of src with the value of data-src
+      return `${part1}${dataSrcValue}${quote}${part2}${part3}${dataSrcValue}${quote}`;
+    }
+  );
+
+  // 3. Remove the 'lazyload' class to prevent any JS from hiding it
+  clean = clean.replace(/class=(["'])(.*?)(lazyload)(.*?)(\1)/gi, (match, quote, before, lazyload, after) => {
+    const newClasses = (before + after).trim().replace(/\s{2,}/g, ' '); // remove lazyload and extra spaces
+    if (newClasses) {
+      return `class=${quote}${newClasses}${quote}`;
+    }
+    return ''; // remove class attribute entirely if lazyload was the only class
+  });
+  
+  // 4. Extract content class if specified
   if (contentClass) {
     const regex = new RegExp(`<div[^>]*class=["'][^"']*${contentClass}[^"']*["'][^>]*>([\\s\\S]*?)<\/div>`, 'i');
     const match = clean.match(regex);
     if (match && match[1]) {
+      // Content class found, return its content (which has already been image-fixed)
       return match[1].trim();
     }
   }
+
+  // 5. Return the full cleaned HTML (if no contentClass or class not found)
   return clean.trim();
 };
-
 const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60).toString().padStart(2, '0');
     const secs = (seconds % 60).toString().padStart(2, '0');
     return `${mins}:${secs}`;
 };
 
-// --- Login Prompt Component ---
 const LoginPrompt = () => {
     const location = useParams();
     return (
@@ -96,7 +105,6 @@ const LoginPrompt = () => {
     );
 };
 
-// --- Lists Management Modal ---
 const ListsModal = ({
   isOpen,
   onClose,
@@ -116,7 +124,6 @@ const ListsModal = ({
   const [newListName, setNewListName] = useState("");
   const [creatingList, setCreatingList] = useState(false);
 
-  // Fetch user's lists and which lists this question is in
   useEffect(() => {
     if (isOpen && userId) {
       const fetchLists = async () => {
@@ -166,7 +173,7 @@ const ListsModal = ({
           const newListData: Omit<QuestionList, 'id' | 'createdAt'> = {
               uid: userId,
               name: newListName.trim(),
-              questionIds: [questionId], // Automatically add current question
+              questionIds: [questionId],
               isPrivate: false,
           };
           
@@ -282,18 +289,13 @@ const ListsModal = ({
   );
 };
 
-
-// --- MAIN APPLICATION COMPONENT ---
 export function QuestionDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user, userInfo, setUserInfo, loading: loadingAuth, isAuthenticated } = useAuth();
-  // --- FIX: Import metadata ---
-  const { metadata, loading: metadataLoading } = useMetadata();
+  const { metadata, loading: metadataLoading, questionCollectionPath, selectedBranch } = useMetadata();
 
   const [question, setQuestion] = useState<Question | null>(null);
-  // --- FIX: Removed allQuestions state ---
-  // const [allQuestions, setAllQuestions] = useState<Question[]>([]);
   const [loadingData, setLoadingData] = useState(true);
 
   const [selectedOptions, setSelectedOptions] = useState<string[]>([]);
@@ -301,28 +303,28 @@ export function QuestionDetail() {
   const [submitted, setSubmitted] = useState(false);
   const [isCorrect, setIsCorrect] = useState(false);
   const [resetting, setResetting] = useState(false);
-
   const [isFavorite, setIsFavorite] = useState(false);
   const [note, setNote] = useState('');
   const [savingNote, setSavingNote] = useState(false);
-  
   const [showListModal, setShowListModal] = useState(false);
-
   const [timeElapsed, setTimeElapsed] = useState(0);
   const [isTimerOn, setIsTimerOn] = useState(false);
   const timerRef = useRef<number | null>(null);
-
   const questionRef = useRef<HTMLDivElement>(null);
   const explanationRef = useRef<HTMLDivElement>(null);
   const optionsRef = useRef<(HTMLButtonElement | null)[]>([]);
-
+  
   const handleResetTimer = () => {
     setTimeElapsed(0);
   };
 
+
   useEffect(() => {
     const fetchAllData = async () => {
-      if (!id) return;
+      if (!id || !questionCollectionPath) {
+        console.log("[QuestionDetail] Waiting for ID or questionCollectionPath...");
+        return;
+      }
       if(timerRef.current) clearInterval(timerRef.current);
       setLoadingData(true);
       setSubmitted(false);
@@ -334,29 +336,32 @@ export function QuestionDetail() {
       setIsTimerOn(false);
 
       try {
-        // --- This part is perfect, it only fetches 1 question ---
-        const docRef = doc(db, 'questions', id);
+        console.log(`[QuestionDetail] Fetching doc: ${questionCollectionPath}/${id}`);
+        const docRef = doc(db, questionCollectionPath, id);
         const docSnap = await getDoc(docRef);
 
         if (docSnap.exists()) {
           const fetchedQuestion = { id: docSnap.id, ...docSnap.data() } as Question;
           setQuestion(fetchedQuestion);
 
-          // --- This part is also perfect, it only fetches 2 user-specific docs ---
           if (user && isAuthenticated && !loadingAuth) {
             const submissionRef = doc(db, `users/${user.uid}/submissions`, id);
             const userQuestionDataRef = doc(db, `users/${user.uid}/userQuestionData`, id);
+            
             const [submissionSnap, userQuestionDataSnap] = await Promise.all([
                 getDoc(submissionRef),
                 getDoc(userQuestionDataRef)
             ]);
+            
             if (submissionSnap.exists()) {
               const sub = submissionSnap.data() as Submission;
-              setSubmitted(true);
-              setIsCorrect(sub.correct);
-              setSelectedOptions(sub.selectedOptions || []);
-              setNatAnswer(sub.natAnswer || '');
-              setTimeElapsed(sub.timeTaken || 0);
+              if (sub.branch === selectedBranch) {
+                setSubmitted(true);
+                setIsCorrect(sub.correct);
+                setSelectedOptions(sub.selectedOptions || []);
+                setNatAnswer(sub.natAnswer || '');
+                setTimeElapsed(sub.timeTaken || 0);
+              }
             }
             if (userQuestionDataSnap.exists()) {
                 const data = userQuestionDataSnap.data() as UserQuestionData;
@@ -365,11 +370,9 @@ export function QuestionDetail() {
             }
           }
         } else {
+          console.warn(`[QuestionDetail] Document not found at: ${questionCollectionPath}/${id}`);
           setQuestion(null);
         }
-
-        // --- FIX: REMOVED the expensive 2500+ read operation ---
-        // if (allQuestions.length === 0) { ... }
 
       } catch (error) {
         console.error("Error fetching question data:", error);
@@ -382,10 +385,9 @@ export function QuestionDetail() {
     return () => {
         if(timerRef.current) clearInterval(timerRef.current);
     }
-  }, [id, user, loadingAuth, isAuthenticated, setUserInfo]);
+  }, [id, user, loadingAuth, isAuthenticated, setUserInfo, questionCollectionPath, selectedBranch]);
 
 
-    // Dedicated effect for timer logic
     useEffect(() => {
         if (isAuthenticated && isTimerOn && !submitted) {
             timerRef.current = window.setInterval(() => {
@@ -450,7 +452,6 @@ export function QuestionDetail() {
     if (submitted || !isAuthenticated) return;
     setSelectedOptions([label]);
   };
-
   const handleMsqToggle = (label: string) => {
     if (submitted || !isAuthenticated) return;
     setSelectedOptions(prev =>
@@ -461,13 +462,13 @@ export function QuestionDetail() {
   };
 
 
-  // --- *** UPDATED: handleSubmit with incremental stats *** ---
   const handleSubmit = async () => {
-    if (!user || !question || !userInfo || submitted) return;
+    if (!user || !question || !userInfo || submitted || !selectedBranch) return;
+    
     setIsTimerOn(false);
     let userCorrect = false;
     const today = new Date();
-    const todayStr = formatDate(today); // 'YYYY-MM-DD'
+    const todayStr = formatDate(today);
     if (!todayStr) {
         console.error("Could not format today's date.");
         return;
@@ -496,73 +497,84 @@ export function QuestionDetail() {
     setIsCorrect(userCorrect);
     setSubmitted(true);
 
-    const submissionData: Partial<Submission> = {
+    const submissionData: Submission = {
       qid: question.id,
       uid: user.uid,
       correct: userCorrect,
       timestamp: today.toISOString(),
       selectedOptions: selectedOptions, 
-      natAnswer: natAnswer,
+      natAnswer: natAnswer || '',
+      timeTaken: timeElapsed > 0 ? timeElapsed : 0,
+      branch: selectedBranch
     };
 
-    if (timeElapsed > 0) {
-        submissionData.timeTaken = timeElapsed;
-    }
-
     try {
-      const oldStats = userInfo.stats || { attempted: 0, correct: 0, accuracy: 0, subjects: {} };
-      const oldStreak = userInfo.streakData || { currentStreak: 0, lastSubmissionDate: '' };
-      const oldCalendar = userInfo.activityCalendar || {};
+      const defaultStats: UserStats = { attempted: 0, correct: 0, accuracy: 0, subjects: {} };
+      const defaultStreak: UserStreakData = { currentStreak: 0, lastSubmissionDate: '' };
+      
+      const oldBranchStats = userInfo.branchStats?.[selectedBranch] || defaultStats;
+      const oldBranchStreak = userInfo.branchStreakData?.[selectedBranch] || defaultStreak;
+      const oldBranchCalendar = userInfo.branchActivityCalendar?.[selectedBranch] || {};
 
-      const newStats = { ...oldStats, subjects: { ...(oldStats.subjects || {}) } };
-      newStats.attempted = (newStats.attempted || 0) + 1;
+      const newBranchStats = { ...oldBranchStats, subjects: { ...(oldBranchStats.subjects || {}) } };
+      newBranchStats.attempted = (newBranchStats.attempted || 0) + 1;
       if (userCorrect) {
-        newStats.correct = (newStats.correct || 0) + 1;
+        newBranchStats.correct = (newBranchStats.correct || 0) + 1;
         const subject = question.subject;
         if (subject && subject !== "General" && subject !== "N/A") {
-          newStats.subjects[subject] = (newStats.subjects[subject] || 0) + 1;
+          newBranchStats.subjects[subject] = (newBranchStats.subjects[subject] || 0) + 1;
         }
       }
-      newStats.accuracy = newStats.attempted > 0 ? parseFloat(((newStats.correct / newStats.attempted) * 100).toFixed(2)) : 0;
+      newBranchStats.accuracy = newBranchStats.attempted > 0 ? parseFloat(((newBranchStats.correct / newBranchStats.attempted) * 100).toFixed(2)) : 0;
 
-      const newStreakData = { ...oldStreak };
-      if (todayStr !== oldStreak.lastSubmissionDate) {
-        const lastSubDate = oldStreak.lastSubmissionDate ? new Date(oldStreak.lastSubmissionDate + 'T00:00:00') : null;
+      const newBranchStreakData = { ...oldBranchStreak };
+      if (todayStr !== oldBranchStreak.lastSubmissionDate) {
+        const lastSubDate = oldBranchStreak.lastSubmissionDate ? new Date(oldBranchStreak.lastSubmissionDate + 'T00:00:00') : null;
         if (lastSubDate && getDayDiff(today, lastSubDate) === 1) {
-            newStreakData.currentStreak = (oldStreak.currentStreak || 0) + 1;
+            newBranchStreakData.currentStreak = (oldBranchStreak.currentStreak || 0) + 1;
         } else {
-            newStreakData.currentStreak = 1; // Reset or start streak
+            newBranchStreakData.currentStreak = 1;
         }
-        newStreakData.lastSubmissionDate = todayStr;
+        newBranchStreakData.lastSubmissionDate = todayStr;
       }
 
-      const newCalendar = { ...oldCalendar };
-      newCalendar[todayStr] = (newCalendar[todayStr] || 0) + 1;
+      const newBranchCalendar = { ...oldBranchCalendar };
+      newBranchCalendar[todayStr] = (newBranchCalendar[todayStr] || 0) + 1;
 
-      const newRating = calculateRating(newStats.accuracy, newStats.correct);
+      const newBranchRating = calculateRating(newBranchStats.accuracy, newBranchStats.correct);
 
       const userDocRef = doc(db, 'users', user.uid);
       const submissionDocRef = doc(db, `users/${user.uid}/submissions`, question.id);
 
       const batch = writeBatch(db);
-      batch.set(submissionDocRef, submissionData as Submission); // Save the submission
-      batch.update(userDocRef, { // Update the main user doc
-          stats: newStats,
-          streakData: newStreakData,
-          activityCalendar: newCalendar,
-          rating: newRating
+      batch.set(submissionDocRef, submissionData);
+
+      batch.update(userDocRef, {
+          [`branchStats.${selectedBranch}`]: newBranchStats,
+          [`branchStreakData.${selectedBranch}`]: newBranchStreakData,
+          [`branchActivityCalendar.${selectedBranch}`]: newBranchCalendar,
+          [`ratings.${selectedBranch}`]: newBranchRating
       });
       
       await batch.commit();
-      console.log("Successfully submitted and updated user stats.");
+      console.log(`Successfully submitted and updated user stats for branch: ${selectedBranch}`);
 
-      setUserInfo(prev => prev ? {
+      setUserInfo(prev => {
+        if (!prev) return null;
+        
+        const newBranchStatsMap = { ...prev.branchStats, [selectedBranch]: newBranchStats };
+        const newBranchStreakMap = { ...prev.branchStreakData, [selectedBranch]: newBranchStreakData };
+        const newBranchCalendarMap = { ...prev.branchActivityCalendar, [selectedBranch]: newBranchCalendar };
+        const newRatingsMap = { ...prev.ratings, [selectedBranch]: newBranchRating };
+
+        return {
           ...prev,
-          stats: newStats,
-          streakData: newStreakData,
-          activityCalendar: newCalendar,
-          rating: newRating
-      } : null);
+          branchStats: newBranchStatsMap,
+          branchStreakData: newBranchStreakMap,
+          branchActivityCalendar: newBranchCalendarMap,
+          ratings: newRatingsMap
+        };
+      });
 
     } catch (error) {
         console.error("Error saving submission/updating stats:", error);
@@ -571,49 +583,55 @@ export function QuestionDetail() {
     }
   };
   
-  // --- *** UPDATED: handleTryAgain with incremental stats *** ---
   const handleTryAgain = async () => {
-    if (!user || !question || !userInfo || resetting) return;
+    if (!user || !question || !userInfo || resetting || !selectedBranch) return;
     setResetting(true);
 
     try {
-        const oldStats = userInfo.stats || { attempted: 0, correct: 0, accuracy: 0, subjects: {} };
-        const newStats = { ...oldStats, subjects: { ...(oldStats.subjects || {}) } };
+        const defaultStats: UserStats = { attempted: 0, correct: 0, accuracy: 0, subjects: {} };
+        const oldBranchStats = userInfo.branchStats?.[selectedBranch] || defaultStats;
+        const newBranchStats = { ...oldBranchStats, subjects: { ...(oldBranchStats.subjects || {}) } };
         
-        if (newStats.attempted > 0) {
-            newStats.attempted -= 1;
+        if (newBranchStats.attempted > 0) {
+            newBranchStats.attempted -= 1;
         }
-        if (isCorrect && newStats.correct > 0) {
-            newStats.correct -= 1;
+        if (isCorrect && newBranchStats.correct > 0) {
+            newBranchStats.correct -= 1;
             const subject = question.subject;
-            if (subject && subject !== "General" && subject !== "N/A" && (newStats.subjects[subject] || 0) > 0) {
-                newStats.subjects[subject] -= 1;
+            if (subject && subject !== "General" && subject !== "N/A" && (newBranchStats.subjects[subject] || 0) > 0) {
+                newBranchStats.subjects[subject] -= 1;
             }
         }
-        newStats.accuracy = newStats.attempted > 0 ? parseFloat(((newStats.correct / newStats.attempted) * 100).toFixed(2)) : 0;
+        newBranchStats.accuracy = newBranchStats.attempted > 0 ? parseFloat(((newBranchStats.correct / newBranchStats.attempted) * 100).toFixed(2)) : 0;
 
-        const newRating = calculateRating(newStats.accuracy, newStats.correct);
+        const newBranchRating = calculateRating(newBranchStats.accuracy, newBranchStats.correct);
         
         const userDocRef = doc(db, 'users', user.uid);
         const submissionDocRef = doc(db, `users/${user.uid}/submissions`, question.id);
 
         const batch = writeBatch(db);
-        batch.delete(submissionDocRef); // Delete the submission
-        batch.update(userDocRef, { // Update stats and rating
-            stats: newStats,
-            rating: newRating
-            // Note: We don't revert streak or calendar. This is complex
-            // and can be fixed by a re-run of the migration script if needed.
+        batch.delete(submissionDocRef);
+        
+        batch.update(userDocRef, { 
+            [`branchStats.${selectedBranch}`]: newBranchStats,
+            [`ratings.${selectedBranch}`]: newBranchRating
         });
 
         await batch.commit();
-        console.log("Successfully reset submission and updated user stats.");
+        console.log(`Successfully reset submission and updated user stats for branch: ${selectedBranch}`);
 
-        setUserInfo(prev => prev ? { 
-            ...prev, 
-            stats: newStats, 
-            rating: newRating 
-        } : null);
+        setUserInfo(prev => {
+            if (!prev) return null;
+            
+            const newBranchStatsMap = { ...prev.branchStats, [selectedBranch]: newBranchStats };
+            const newRatingsMap = { ...prev.ratings, [selectedBranch]: newBranchRating };
+            
+            return {
+                ...prev,
+                branchStats: newBranchStatsMap,
+                ratings: newRatingsMap
+            };
+        });
 
         setSubmitted(false);
         setSelectedOptions([]);
@@ -623,42 +641,32 @@ export function QuestionDetail() {
         setIsTimerOn(false);
 
     } catch (error) {
-        console.error("Error resetting question:", error);
+      console.error("Error resetting question:", error);
     } finally {
-        setResetting(false);
+      setResetting(false);
     }
   };
   
-  // --- *** FIX: handleToggleFavorite now updates both documents *** ---
   const handleToggleFavorite = async () => {
     if (!user || !id) return;
     const newFavoriteStatus = !isFavorite;
-    setIsFavorite(newFavoriteStatus); // Update UI immediately
+    setIsFavorite(newFavoriteStatus);
 
-    // Create references for BOTH documents
     const userQuestionDataRef = doc(db, `users/${user.uid}/userQuestionData`, id);
     const favoritesListRef = doc(db, `users/${user.uid}/questionLists`, 'favorites');
 
     try {
-        // Use a batch write to update both documents atomically
         const batch = writeBatch(db);
-
-        // 1. Update the userQuestionData document (sets isFavorite flag)
         batch.set(userQuestionDataRef, { isFavorite: newFavoriteStatus }, { merge: true });
 
-        // 2. Update the 'favorites' list document (adds/removes from the array)
         if (newFavoriteStatus) {
-            // Add question to favorites list
             batch.set(favoritesListRef, { 
                 questionIds: arrayUnion(id),
-                // Add other fields in case the doc doesn't exist yet
                 name: "Favorites",
                 uid: user.uid,
-                createdAt: serverTimestamp() // Set timestamp if creating
-            }, { merge: true }); // Use merge:true to create if not exists
+                createdAt: serverTimestamp()
+            }, { merge: true });
         } else {
-            // Remove question from favorites list
-            // Use update - this will fail gracefully if the doc or array doesn't exist
             batch.update(favoritesListRef, { 
                 questionIds: arrayRemove(id) 
             });
@@ -669,7 +677,7 @@ export function QuestionDetail() {
 
     } catch (error) {
         console.error("Error toggling favorite status:", error);
-        setIsFavorite(!newFavoriteStatus); // Revert UI on error
+        setIsFavorite(!newFavoriteStatus);
     }
   }
 
@@ -686,7 +694,6 @@ export function QuestionDetail() {
       }
   }
   
-  // --- FIX: Rewritten to use metadata ID array ---
   const findNextQuestionId = () => {
     if (!id || !metadata?.allQuestionIds) return null;
     const currentIndex = metadata.allQuestionIds.indexOf(id);
@@ -696,7 +703,6 @@ export function QuestionDetail() {
     return null;
   };
   
-  // --- FIX: Rewritten to use metadata ID array ---
   const findPrevQuestionId = () => {
     if (!id || !metadata?.allQuestionIds) return null;
     const currentIndex = metadata.allQuestionIds.indexOf(id);
@@ -721,8 +727,7 @@ export function QuestionDetail() {
     }
   };
 
-  // --- FIX: Add metadataLoading to the check ---
-  if (loadingData || metadataLoading) {
+  if (loadingData || metadataLoading || loadingAuth) {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex items-center justify-center">
         <Loader2 className="w-12 h-12 text-blue-600 animate-spin" />
@@ -737,6 +742,9 @@ export function QuestionDetail() {
           <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
             Question not found.
           </h2>
+          <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
+            This question may not exist or may not be part of the selected branch.
+          </p>
           <button
             onClick={() => navigate('/practice')}
             className="text-blue-600 dark:text-blue-400 hover:underline"
@@ -748,7 +756,6 @@ export function QuestionDetail() {
     );
   }
 
-  // --- NEW: Helper function for question type colors ---
   const getQuestionTypeColor = (type: string | undefined) => {
     switch (type) {
       case 'mcq': return 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/50 border border-blue-200 dark:border-blue-800/50';
@@ -759,7 +766,12 @@ export function QuestionDetail() {
   };
   
   const cleanedQuestionHtml = extractAndCleanHtml(question.question_html, 'question_text');
-  const cleanedExplanationHtml = extractAndCleanHtml(question.explanation_html, 'mtq_explanation-text');
+  let cleanedExplanationHtml: string;
+  if (question.explanation_redirect_url) {
+      cleanedExplanationHtml = `<p>This explanation is provided by GateOverflow. <a href="${question.explanation_redirect_url}" target="_blank" rel="noopener noreferrer" class="text-blue-500 hover:underline font-semibold inline-flex items-center gap-1">Click here to view the full discussion <ExternalLink class="w-4 h-4" /></a></p>`;
+  } else {
+      cleanedExplanationHtml = extractAndCleanHtml(question.explanation_html, 'mtq_explanation-text');
+  }
   const primaryInfo = new Set([
       question.subject?.toLowerCase(),
       question.topic?.toLowerCase(),
@@ -772,7 +784,6 @@ export function QuestionDetail() {
 
   return (
     <>
-      {/* NEW: Lists Modal */}
       {isAuthenticated && user && id && (
         <ListsModal
           isOpen={showListModal}
@@ -784,17 +795,16 @@ export function QuestionDetail() {
 
       <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          {/* Navigation Row */}
           <div className="flex justify-between items-center mb-6">
-              <button onClick={handlePrev} disabled={!findPrevQuestionId()} className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-                <ArrowLeft className="w-5 h-5" /> Previous
-              </button>
-              <button onClick={() => navigate('/practice')} className="text-sm font-medium text-blue-600 dark:text-blue-400 hover:underline">
-                Back to Practice List
-              </button>
-              <button onClick={handleNext} disabled={!findNextQuestionId()} className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-                Next <ArrowRight className="w-5 h-5" />
-              </button>
+            <button onClick={handlePrev} disabled={!findPrevQuestionId()} className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+              <ArrowLeft className="w-5 h-5" /> Previous
+            </button>
+            <button onClick={() => navigate('/practice')} className="text-sm font-medium text-blue-600 dark:text-blue-400 hover:underline">
+              Back to Practice List
+            </button>
+            <button onClick={handleNext} disabled={!findNextQuestionId()} className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+              Next <ArrowRight className="w-5 h-5" />
+            </button>
           </div>
 
           {!loadingAuth && !isAuthenticated && <LoginPrompt />}
@@ -815,20 +825,17 @@ export function QuestionDetail() {
                               className="ml-1 p-1 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
                               title={!isAuthenticated ? "Login to use timer" : (isTimerOn ? "Pause timer" : "Start timer")}
                             >
-                                {isTimerOn ? <Pause className="w-3.5 h-3.5"/> : <Play className="w-3.5 h-3.5"/>}
+                              {isTimerOn ? <Pause className="w-3.5 h-3.5"/> : <Play className="w-3.5 h-3.5"/>}
                             </button>
-                            {/* MODIFIED: Added reset timer button */}
                             <button
                               onClick={handleResetTimer}
                               disabled={submitted || !isAuthenticated || timeElapsed === 0}
                               className="ml-0.5 p-1 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
                               title={!isAuthenticated ? "Login to reset timer" : "Reset timer"}
                             >
-                                <RotateCcw className="w-3.5 h-3.5" />
+                              <RotateCcw className="w-3.5 h-3.5" />
                             </button>
                         </div>
-                        
-                        {/* MODIFIED: Favorite (Bookmark) Button */}
                           <button
                             onClick={handleToggleFavorite}
                             disabled={!isAuthenticated}
@@ -839,24 +846,20 @@ export function QuestionDetail() {
                             } disabled:opacity-50 disabled:cursor-not-allowed`}
                             title={!isAuthenticated ? "Login to add to Favorites" : (isFavorite ? "Remove from Favorites" : "Add to Favorites")}
                           >
-                              <Bookmark className={`w-3.5 h-3.5 ${isFavorite ? 'fill-current' : ''}`}/>
-                              {isFavorite ? 'Favorited' : 'Favorite'}
+                            <Bookmark className={`w-3.5 h-3.5 ${isFavorite ? 'fill-current' : ''}`}/>
+                            {isFavorite ? 'Favorited' : 'Favorite'}
                           </button>
-
-                        {/* NEW: Save to List Button */}
                           <button
                             onClick={() => setShowListModal(true)}
                             disabled={!isAuthenticated}
                             className="flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg transition-colors border bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700 hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
                             title={!isAuthenticated ? "Login to save to lists" : "Save to list"}
                           >
-                              <ListPlus className="w-3.5 h-3.5" />
-                              Save
+                            <ListPlus className="w-3.5 h-3.5" />
+                            Save
                           </button>
-
                     </div>
                 </div>
-              {/* --- MODIFIED: Added Question Type Badge --- */}
               <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-gray-600 dark:text-gray-400">
                 <span className={`flex items-center gap-1 px-2 py-0.5 rounded-full font-medium uppercase ${getQuestionTypeColor(question.question_type)}`}>
                   <ClipboardList className="w-3.5 h-3.5" /> {question.question_type || 'N/A'}
@@ -864,6 +867,9 @@ export function QuestionDetail() {
                 <span className="flex items-center gap-1"><BookOpen className="w-3.5 h-3.5" /> {question.subject}</span>
                 <span className="flex items-center gap-1"><Bookmark className="w-3.5 h-3.5" /> {question.topic}</span>
                 <span className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5" /> GATE {question.year}</span>
+                <span className="flex items-center gap-1 px-2 py-0.5 rounded-full font-medium bg-gray-100 dark:bg-gray-700/50 text-gray-700 dark:text-gray-300">
+                  {question.branch?.toUpperCase() || 'GENERAL'}
+                </span>
               </div>
               {otherTags.length > 0 && (
                   <div className="mt-3 flex flex-wrap items-center gap-1.5">
@@ -875,26 +881,29 @@ export function QuestionDetail() {
             </div>
 
             <div className="p-6">
-              <div ref={questionRef} className="text-gray-800 dark:text-gray-200 space-y-4 max-w-none mb-8 prose dark:prose-invert prose-sm md:prose-base">
-                <div dangerouslySetInnerHTML={{ __html: cleanedQuestionHtml }} />
-                {question.question_image_links && question.question_image_links.length > 0 && (
-                  <div className="space-y-4">
-                    {question.question_image_links.map((imgUrl, index) => (
-                      <img key={`q-img-${index}`} src={imgUrl} alt={`Question illustration ${index + 1}`} className="mt-4 rounded-lg border dark:border-gray-700 max-w-full h-auto mx-auto" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-                    ))}
-                  </div>
-                )}
-              </div>
+              {/* --- LAYOUT FIX: Reduced mb-8 to mb-4 --- */}
+              <div 
+                ref={questionRef} 
+                className="text-gray-800 dark:text-gray-200 max-w-none mb-4 prose dark:prose-invert prose-sm md:prose-base"
+                dangerouslySetInnerHTML={{ __html: cleanedQuestionHtml }} 
+              />
+              
+              {/* --- LAYOUT FIX: Reduced mb-8 to mb-6 --- */}
+              {question.question_image_links && question.question_image_links.length > 0 && (
+                <div className="space-y-4 mb-6">
+                  {question.question_image_links.map((imgUrl, index) => (
+                    <img key={`q-img-${index}`} src={imgUrl} alt={`Question illustration ${index + 1}`} className="rounded-lg border dark:border-gray-700 max-w-full h-auto mx-auto" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                  ))}
+                </div>
+              )}
 
-              {/* --- MODIFIED: Options Rendering Logic --- */}
+              {/* Options Rendering */}
               {question.question_type === 'nat' ? (
-                // NAT Input
                 <div className="mb-8">
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Your Answer</label>
                   <input type="text" value={natAnswer} onChange={(e) => setNatAnswer(e.target.value)} disabled={submitted || !isAuthenticated} className="w-full max-w-xs px-4 py-3 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-white disabled:bg-gray-100 dark:disabled:bg-gray-800 disabled:cursor-not-allowed" placeholder="Enter numerical answer" />
                 </div>
               ) : question.question_type === 'msq' ? (
-                // MSQ Checkboxes
                 <div className="space-y-3 mb-8">
                   {question.options.map((option, index) => {
                     const isSelected = selectedOptions.includes(option.label);
@@ -921,7 +930,6 @@ export function QuestionDetail() {
                     return (
                       <button key={option.label} ref={el => optionsRef.current[index] = el} onClick={() => handleMsqToggle(option.label)} disabled={submitted || !isAuthenticated} className={optionClasses} title={!isAuthenticated ? "Login to select an option" : ""}>
                           <span className={`flex-shrink-0 w-7 h-7 rounded-md border-2 flex items-center justify-center font-semibold text-sm mt-0.5 ${ isSelected && !submitted ? 'bg-blue-500 border-blue-500 text-white' : submitted && isCorrectOption ? 'bg-green-500 border-green-500 text-white' : submitted && isSelected && !isCorrectOption ? 'bg-red-500 border-red-500 text-white' : 'bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300' }`}>
-                              {/* Show checkmark if selected, otherwise label */}
                               {isSelected ? <CheckIcon className="w-4 h-4" /> : option.label}
                           </span>
                           <span className="flex-1 text-gray-900 dark:text-white prose dark:prose-invert prose-sm" dangerouslySetInnerHTML={{ __html: cleanedOptionHtml }} />
@@ -931,7 +939,6 @@ export function QuestionDetail() {
                   })}
                 </div>
               ) : (
-                // MCQ Radio Buttons
                 <div className="space-y-3 mb-8">
                   {question.options.map((option, index) => {
                     const isSelected = selectedOptions[0] === option.label;
@@ -967,8 +974,6 @@ export function QuestionDetail() {
                   })}
                 </div>
               )}
-              {/* --- End Options --- */}
-
 
               {isAuthenticated && !submitted && (
                 <button 
@@ -986,50 +991,61 @@ export function QuestionDetail() {
                         {isCorrect ? <CheckCircle className="w-6 h-6 text-green-600" /> : <XCircle className="w-6 h-6 text-red-600" />}
                         <span className={`font-semibold ${isCorrect ? 'text-green-800 dark:text-green-200' : 'text-red-800 dark:text-red-200'}`}>
                           {isCorrect ? 'Correct!' : 'Incorrect.'}
-                          {/* --- FIX: Show correct NAT range --- */}
                           {question.question_type === 'nat' && !isCorrect && ` The correct answer is between ${question.nat_answer_min || 'N/A'} and ${question.nat_answer_max || 'N/A'}.`}
-                          {/* --- END FIX --- */}
                           {question.question_type === 'mcq' && !isCorrect && ` Correct option was ${question.options.find(o => o.is_correct)?.label}.`}
                           {question.question_type === 'msq' && !isCorrect && ` Correct options were ${question.options.filter(o => o.is_correct).map(o => o.label).join(', ')}.`}
                         </span>
                       </div>
                   </div>
-                  {cleanedExplanationHtml && (
+                  {(cleanedExplanationHtml || (question.explanation_image_links && question.explanation_image_links.length > 0)) && (
                     <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-6 border border-gray-200 dark:border-gray-700/50">
                       <h3 className="font-semibold text-gray-800 dark:text-gray-100 mb-3 text-lg">Explanation</h3>
-                      <div ref={explanationRef} className="space-y-3 max-w-none text-gray-700 dark:text-gray-300 text-sm prose dark:prose-invert prose-sm md:prose-base">
-                        <div dangerouslySetInnerHTML={{ __html: cleanedExplanationHtml }} />
-                        {question.explanation_image_links && question.explanation_image_links.length > 0 && (
-                            <div className="space-y-4">
-                                {question.explanation_image_links.map((imgUrl, index) => (
-                                    <img key={`e-img-${index}`} src={imgUrl} alt={`Explanation illustration ${index + 1}`} className="mt-4 rounded-lg border dark:border-gray-700 max-w-full h-auto mx-auto" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}/>
-                                ))}
-                            </div>
-                        )}
-                      </div>
+                      
+                      <div 
+                        ref={explanationRef} 
+                        className="max-w-none text-gray-700 dark:text-gray-300 text-sm prose dark:prose-invert prose-sm md:prose-base"
+                        dangerouslySetInnerHTML={{ __html: cleanedExplanationHtml }} 
+                      />
+                      
+                      {!question.explanation_redirect_url && question.explanation_image_links && question.explanation_image_links.length > 0 && (
+                          <div className="space-y-4 mt-4">
+                            {question.explanation_image_links.map((imgUrl, index) => (
+                                <img key={`e-img-${index}`} src={imgUrl} alt={`Explanation illustration ${index + 1}`} className="rounded-lg border dark:border-gray-700 max-w-full h-auto mx-auto" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}/>
+                            ))}
+                          </div>
+                      )}
                     </div>
                   )}
                   <div className="flex flex-col sm:flex-row gap-3">
                       <button onClick={handleTryAgain} disabled={resetting} className="flex-1 py-3 bg-gray-200 text-gray-800 dark:bg-gray-700 dark:text-white rounded-lg font-semibold hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors flex items-center justify-center gap-2 disabled:opacity-50">
-                          {resetting ? <Loader2 className="w-5 h-5 animate-spin" /> : <RefreshCcw className="w-5 h-5" />}
-                          Try Again
+                        {resetting ? <Loader2 className="w-5 h-5 animate-spin" /> : <RefreshCcw className="w-5 h-5" />}
+                        Try Again
                       </button>
                     <button onClick={handleNext} disabled={!findNextQuestionId()} className="flex-1 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors flex items-center justify-center gap-2 disabled:bg-gray-400 dark:disabled:bg-gray-700 disabled:cursor-not-allowed">
-                          Next Question <ArrowRight className="w-5 h-5" />
-                      </button>
+                      Next Question <ArrowRight className="w-5 h-5" />
+                    </button>
                   </div>
                 </div>
               )}
             </div>
 
-            {/* Notes Section */}
             <div className="p-6 border-t border-gray-200 dark:border-gray-800">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">My Notes</h3>
-                <textarea value={note} onChange={(e) => setNote(e.target.value)} disabled={!isAuthenticated} placeholder={isAuthenticated ? "Write a short note for this question..." : "Login to save notes."} className="w-full p-3 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-white min-h-[100px] disabled:bg-gray-100 dark:disabled:bg-gray-800 disabled:cursor-not-allowed"/>
-                <button onClick={handleSaveNote} disabled={!isAuthenticated || savingNote} className="mt-3 w-full sm:w-auto px-6 py-2 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 disabled:bg-gray-400 dark:disabled:bg-gray-500 disabled:cursor-not-allowed flex items-center justify-center gap-2">
-                    {savingNote ? <Loader2 className="w-5 h-5 animate-spin"/> : <Save className="w-5 h-5" />}
-                    Save Note
-                </button>
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">My Notes</h3>
+              <textarea 
+                value={note} 
+                onChange={(e) => setNote(e.target.value)} 
+                disabled={!isAuthenticated} 
+                placeholder={isAuthenticated ? "Write a short note for this question..." : "Login to save notes."} 
+                className="w-full p-3 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-white min-h-[100px] disabled:bg-gray-100 dark:disabled:bg-gray-800 disabled:cursor-not-allowed"
+              />
+              <button 
+                onClick={handleSaveNote} 
+                disabled={!isAuthenticated || savingNote} 
+                className="mt-3 w-full sm:w-auto px-6 py-2 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 disabled:bg-gray-400 dark:disabled:bg-gray-500 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {savingNote ? <Loader2 className="w-5 h-5 animate-spin"/> : <Save className="w-5 h-5" />}
+                Save Note
+              </button>
             </div>
           </div>
         </div>

@@ -1,22 +1,22 @@
 import { BrowserRouter, Routes, Route, useLocation, Navigate } from 'react-router-dom';
-import { ThemeProvider } from './contexts/ThemeContext';
-import { AuthProvider, useAuth } from './contexts/AuthContext';
+// --- FIX: Add .tsx extensions to all local imports ---
+import { ThemeProvider } from './contexts/ThemeContext.tsx';
+import { AuthProvider, useAuth } from './contexts/AuthContext.tsx';
 import { DailyChallengeProvider } from './contexts/DailyChallengeContext.tsx';
-// --- We must import MetadataProvider here ---
 import { MetadataProvider } from './contexts/MetadataContext.tsx'; 
-import { Navbar } from './components/Navbar';
+import { Navbar } from './components/Navbar.tsx';
 import { ProtectedRoute } from './components/ProtectedRoute.tsx';
-import { Home } from './pages/Home';
-import { Practice } from './pages/Practice';
-import { QuestionDetail } from './pages/QuestionDetail';
-import { Leaderboard } from './pages/Leaderboard';
-import { Profile } from './pages/Profile';
-import { Login } from './pages/Login';
-import { AdminPanel } from './pages/AdminPanel';
-import { AddQuestion } from './pages/AddQuestion';
-import { Settings } from './pages/Settings';
+import { Home } from './pages/Home.tsx';
+import { Practice } from './pages/Practice.tsx';
+import { QuestionDetail } from './pages/QuestionDetail.tsx';
+import { Leaderboard } from './pages/Leaderboard.tsx';
+import { Profile } from './pages/Profile.tsx';
+import { Login } from './pages/Login.tsx';
+import { AdminPanel } from './pages/AdminPanel.tsx';
+import { AddQuestion } from './pages/AddQuestion.tsx';
+import { Settings } from './pages/Settings.tsx';
 import { useEffect } from 'react';
-import { NotFound } from './pages/NotFound';
+import { NotFound } from './pages/NotFound.tsx';
 
 const AppContent = () => {
   const { userInfo, loading, isAuthenticated } = useAuth(); 
@@ -61,8 +61,7 @@ const AppContent = () => {
           <Route path="/practice" element={<Practice />} />
           <Route path="/leaderboard" element={<Leaderboard />} />
           <Route path="/login" element={<Login />} />
-          <Route path="/profile/:username" element={<Profile />} /> {/* Profile might be public? Check logic inside */}
-          {/* Make Question Detail public */}
+          <Route path="/profile/:username" element={<Profile />} />
           <Route path="/question/:id" element={<QuestionDetail />} />
 
 
@@ -113,10 +112,7 @@ function App() {
     <ThemeProvider>
       <BrowserRouter>
         <AuthProvider>
-         {/* --- THIS IS THE FIX ---
-             MetadataProvider must be *outside* DailyChallengeProvider,
-             because DailyChallengeProvider uses it.
-         --- */}
+         {/* --- REFACTOR: Removed redundant BranchProvider --- */}
           <MetadataProvider>
             <DailyChallengeProvider>
               <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
@@ -124,7 +120,6 @@ function App() {
               </div>
             </DailyChallengeProvider>
           </MetadataProvider>
-         {/* --- END OF FIX --- */}
         </AuthProvider>
       </BrowserRouter>
     </ThemeProvider>

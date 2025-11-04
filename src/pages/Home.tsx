@@ -6,8 +6,8 @@ import { useAuth } from '../contexts/AuthContext';
 import { useDailyChallenge } from '../contexts/DailyChallengeContext'; // Import the Daily Challenge hook
 import { useMetadata } from '../contexts/MetadataContext'; // Import the Metadata hook
 import { db } from '../firebase';
-import { collection, getDocs, query, limit, orderBy, doc, getDoc } from 'firebase/firestore'; // <-- Import doc and getDoc
-import { User, Question } from '../data/mockData'; // <-- Re-added 'Question' type
+import { collection, getDocs, query, limit, orderBy, doc, getDoc } from 'firebase/firestore';
+import { User, Question } from '../data/mockData';
 import { HomeSkeleton } from '../components/Skeletons'; // Import skeleton
 
 interface SubjectStats {
@@ -34,28 +34,26 @@ const getColorForString = (str: string): string => {
   return COLORS[index];
 };
 
-// --- RATING FUNCTION REMOVED ---
-// No longer needed, as rating is pre-calculated and read from the user document.
 
 export function Home() {
-  const { userInfo, isAuthenticated, loading: authLoading } = useAuth(); // Use auth loading state
-  const { metadata, loading: metadataLoading } = useMetadata(); // Get metadata and loading state
-  const { dailyChallengeId, loadingChallenge } = useDailyChallenge(); // <-- Get ID and loading state
+  const { userInfo, isAuthenticated, loading: authLoading } = useAuth();
+  // --- UPDATED: Get branch-aware metadata ---
+  const { metadata, loading: metadataLoading, availableBranches, selectedBranch, questionCollectionPath } = useMetadata();
+  const { dailyChallengeId, loadingChallenge } = useDailyChallenge();
   
-  const [dailyChallenge, setDailyChallenge] = useState<Question | null>(null); // <-- State for the full challenge object
+  const [dailyChallenge, setDailyChallenge] = useState<Question | null>(null);
   const [leaderboardPreview, setLeaderboardPreview] = useState<User[]>([]);
-  const [loadingLeaderboard, setLoadingLeaderboard] = useState(true); // Separate loading state for leaderboard
+  const [loadingLeaderboard, setLoadingLeaderboard] = useState(true);
 
   // --- DERIVE SUBJECTS FROM METADATA ---
-  // This is now instant and costs 0 reads, as metadata is already loaded.
-  const subjectStats: SubjectStats[] = useMemo(() => { // <-- Added explicit type
+  const subjectStats: SubjectStats[] = useMemo(() => {
     if (!metadata?.subjectCounts) {
       return [];
     }
     return Object.entries(metadata.subjectCounts)
       .map(([name, count]) => ({
         name,
-        count: count || 0, // Ensure count is a number
+        count: count || 0,
         color: getColorForString(name),
       }))
       .sort((a, b) => a.name.localeCompare(b.name));
@@ -63,57 +61,61 @@ export function Home() {
 
 
   // --- FETCH LEADERBOARD DATA ---
-  // This useEffect is now *only* responsible for fetching the leaderboard preview.
+  // --- UPDATED: To be branch-aware ---
   useEffect(() => {
     const fetchLeaderboard = async () => {
+      // Wait for branch to be selected
+      if (!selectedBranch) return;
+
       setLoadingLeaderboard(true);
       try {
-        // --- *** FIX: Query by 'rating' field *** ---
-        // This is now consistent with Leaderboard.tsx and is accurate.
-        const usersQuery = query(collection(db, 'users'), orderBy('rating', 'desc'), limit(5));
+        // --- NEW: Sort by the branch-specific rating ---
+        const usersQuery = query(
+          collection(db, 'users'), 
+          orderBy(`ratings.${selectedBranch}`, 'desc'), 
+          limit(5)
+        );
         const usersSnapshot = await getDocs(usersQuery);
         
         const fetchedUsers = usersSnapshot.docs.map(doc => {
             const data = doc.data() as User;
-            // Ensure stats and rating exist for display
-            if (!data.stats) {
-                data.stats = { attempted: 0, correct: 0, accuracy: 0, subjects: {} };
-            }
-            if (data.rating === undefined) {
-                data.rating = 0;
-            }
-            return data;
+            // --- NEW: Use branch-specific stats ---
+            const branchStats = data.branchStats?.[selectedBranch] || { attempted: 0, correct: 0, accuracy: 0, subjects: {} };
+            const branchRating = data.ratings?.[selectedBranch] || 0;
+
+            // Return a "partial" user object shaped for the leaderboard
+            return {
+              ...data,
+              stats: branchStats, // Overwrite old stats with branch-specific
+              rating: branchRating, // Overwrite old rating with branch-specific
+            };
         });
 
-        // --- REMOVED: Client-side calculation and sorting ---
-        // The query is already sorted by rating.
-
-        setLeaderboardPreview(fetchedUsers); // Already the top 5
-        // --- End Leaderboard Preview Update ---
+        setLeaderboardPreview(fetchedUsers);
 
       } catch (error) {
         console.error("Error fetching leaderboard preview:", error);
         setLeaderboardPreview([]);
       } finally {
-        setLoadingLeaderboard(false); // Finish data loading
+        setLoadingLeaderboard(false);
       }
     };
 
     fetchLeaderboard();
-  }, []); // Run only once on mount
+  }, [selectedBranch]); // --- Re-fetch if branch changes ---
 
   // --- FETCH DAILY CHALLENGE OBJECT ---
-  // This useEffect fetches the single daily challenge question *after* its ID is loaded.
   useEffect(() => {
     const fetchChallenge = async () => {
-      if (dailyChallengeId) {
+      // Use the branch-aware questionCollectionPath
+      if (dailyChallengeId && questionCollectionPath) {
         try {
-          const docRef = doc(db, 'questions', dailyChallengeId);
+          const docRef = doc(db, questionCollectionPath, dailyChallengeId);
           const docSnap = await getDoc(docRef);
           if (docSnap.exists()) {
             setDailyChallenge({ id: docSnap.id, ...docSnap.data() } as Question);
           } else {
-            console.warn("Daily challenge document not found:", dailyChallengeId);
+            console.warn(`Daily challenge document not found in ${questionCollectionPath}:`, dailyChallengeId);
             setDailyChallenge(null);
           }
         } catch (error) {
@@ -125,15 +127,20 @@ export function Home() {
       }
     };
 
-    if (!loadingChallenge) { // Only run once the challenge ID has been determined
+    if (!loadingChallenge) {
       fetchChallenge();
     }
-  }, [dailyChallengeId, loadingChallenge]);
+  }, [dailyChallengeId, loadingChallenge, questionCollectionPath]); // Re-run if collection path changes
 
   // Show skeleton if either auth, metadata, or challenge ID is loading
   if (authLoading || metadataLoading || loadingChallenge) {
     return <HomeSkeleton />;
   }
+  
+  const branchName = availableBranches[selectedBranch] || 'Preparation';
+
+  // --- NEW: Get branch-specific rating for welcome message ---
+  const userBranchRating = userInfo?.ratings?.[selectedBranch] || 0;
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 md:py-20">
@@ -143,7 +150,8 @@ export function Home() {
           Practice. Analyze. <span className="text-blue-500">Master GATE.</span>
         </h1>
         <p className="text-lg md:text-xl text-slate-600 dark:text-slate-400 max-w-3xl mx-auto">
-          Your complete platform for GATE Electronics & Communication preparation, with curated questions, performance tracking, and community leaderboards.
+          {/* UPDATED: Dynamic text */}
+          Your complete platform for GATE {branchName} preparation, with curated questions, performance tracking, and community leaderboards.
         </p>
         {/* Welcome Message */}
         {isAuthenticated && userInfo && (
@@ -151,23 +159,23 @@ export function Home() {
             <p className="text-lg text-slate-700 dark:text-slate-300">
               Welcome back, <span className="font-semibold text-blue-600 dark:text-blue-300">{userInfo.name}</span>!
             </p>
-            {/* --- FIX: Use pre-calculated rating from userInfo --- */}
             <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-                Current Rating: <span className="font-semibold text-blue-600 dark:text-blue-400">{userInfo.rating ?? 0}</span>
+                {/* --- NEW: Show branch-specific rating --- */}
+                Current Rating ({branchName}): <span className="font-semibold text-blue-600 dark:text-blue-400">{userBranchRating}</span>
             </p>
           </div>
         )}
       </div>
 
       {/* Daily Challenge Section */}
-      {isAuthenticated && dailyChallenge && ( // <-- This 'dailyChallenge' now refers to our local state
+      {isAuthenticated && dailyChallenge && (
         <div className="mb-16 glass-card p-6 md:p-8 border-blue-500/20">
           <div className="flex flex-col md:flex-row items-center gap-4 md:gap-8">
               <div className="flex-shrink-0 w-16 h-16 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-2xl flex items-center justify-center shadow-lg">
                 <Zap className="w-8 h-8 text-white" />
               </div>
               <div className="flex-1 text-center md:text-left">
-                <h2 className="text-2xl font-bold text-slate-800 dark:text-white">Daily Challenge</h2>
+                <h2 className="text-2xl font-bold text-slate-800 dark:text-white">Daily Challenge ({branchName})</h2>
                 <p className="text-slate-600 dark:text-slate-300 mt-1">
                   "{dailyChallenge.title}" from {dailyChallenge.subject}. Give it a shot!
                 </p>
@@ -188,7 +196,7 @@ export function Home() {
         {/* Subjects Section */}
         <div className="lg:col-span-2">
           <h2 className="text-3xl font-bold text-slate-900 dark:text-white mb-6">
-            Subjects Overview
+            Subjects Overview ({branchName})
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {subjectStats.map((subject) => (
@@ -224,7 +232,7 @@ export function Home() {
             {/* Placeholder if no subjects */}
             {subjectStats.length === 0 && (
               <p className="md:col-span-2 text-center text-slate-500 dark:text-slate-400 py-6">
-                No subjects found. Add questions in the admin panel.
+                No subjects found for this branch.
               </p>
             )}
           </div>
@@ -234,7 +242,7 @@ export function Home() {
         <div className="glass-card p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-2xl font-bold text-slate-900 dark:text-white">
-              Top Performers
+              Top Performers ({branchName})
             </h2>
             <Link to="/leaderboard" className="text-sm font-medium text-blue-600 dark:text-blue-400 hover:underline">
               View All
@@ -257,10 +265,8 @@ export function Home() {
             ) : leaderboardPreview.length === 0 ? (
               <p className="p-4 text-center text-slate-500 dark:text-slate-400">No users yet.</p>
             ) : (
-              // Display users (already sorted by rating from query)
               leaderboardPreview.map((leader, index) => (
                 <div key={leader.uid} className="flex items-center gap-4">
-                  {/* Rank */}
                   <div className={`w-8 h-8 flex items-center justify-center rounded-full font-bold text-sm ${
                     index === 0 ? 'bg-yellow-400 text-white' :
                     index === 1 ? 'bg-slate-400 text-white' :
@@ -269,18 +275,17 @@ export function Home() {
                   }`}>
                     {index + 1}
                   </div>
-                  {/* Avatar */}
                   <img src={leader.avatar || '/user.png'} alt={leader.name} className="w-10 h-10 rounded-full object-cover border dark:border-slate-700" onError={(e) => { (e.target as HTMLImageElement).src = '/user.png'; }}/>
-                  {/* Name & Solved */}
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-slate-800 dark:text-white truncate">{leader.name}</p>
                     <p className="text-sm text-slate-500 dark:text-slate-400">
-                      {leader.stats.correct || 0} solved
+                      {/* --- FIXED: Added optional chaining --- */}
+                      {leader.stats?.correct ?? 0} solved
                     </p>
                   </div>
-                  {/* Rating */}
                   <div className="flex items-center gap-1 text-blue-600 dark:text-blue-400" title="Performance Rating">
                     <BarChart className="w-4 h-4" />
+                    {/* --- NEW: Show branch rating --- */}
                     <span className="font-semibold text-sm">{leader.rating ?? 0}</span>
                   </div>
                 </div>
@@ -312,4 +317,3 @@ export function Home() {
     </div>
   );
 }
-

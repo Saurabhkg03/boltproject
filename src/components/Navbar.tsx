@@ -1,24 +1,87 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Moon, Sun, Code2, LogOut, User, Shield, Settings, ChevronDown, Flame } from 'lucide-react';
+import { Moon, Sun, Code2, LogOut, User, Shield, Settings, ChevronDown, Flame, BookCopy } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext.tsx';
 import { useAuth } from '../contexts/AuthContext.tsx';
-import { useDailyChallenge } from '../contexts/DailyChallengeContext.tsx'; // <-- Import hook
+import { useDailyChallenge } from '../contexts/DailyChallengeContext.tsx';
+// --- IMPORT METADATA HOOK ---
+import { useMetadata } from '../contexts/MetadataContext.tsx';
 import { useState, useRef, useEffect } from 'react';
 import React from 'react';
 
+// --- NEW: Branch Selector Component ---
+const BranchSelector = () => {
+  const { selectedBranch, setSelectedBranch, availableBranches, loading } = useMetadata();
+  const [isOpen, setIsOpen] = useState(false);
+  const selectorRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (selectorRef.current && !selectorRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [selectorRef]);
+
+  if (loading) {
+     return (
+        <div className="flex items-center gap-2 px-3 py-2 rounded-full bg-slate-200/50 dark:bg-slate-800/50 animate-pulse">
+            <BookCopy className="w-4 h-4 text-slate-400" />
+            <div className="h-4 w-12 rounded bg-slate-400/50"></div>
+            <ChevronDown className="w-5 h-5 text-slate-400" />
+        </div>
+     );
+  }
+  
+  return (
+    <div className="relative" ref={selectorRef}>
+        <button 
+            onClick={() => setIsOpen(!isOpen)} 
+            className="flex items-center gap-2 px-3 py-2 rounded-full hover:bg-slate-200/50 dark:hover:bg-slate-800/50 transition-colors group"
+        >
+            <BookCopy className="w-4 h-4 text-blue-500" />
+            <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                {availableBranches[selectedBranch] || 'Select'}
+            </span>
+            <ChevronDown className={`w-5 h-5 text-slate-500 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+        </button>
+        {isOpen && (
+            <div className="absolute left-0 sm:right-0 sm:left-auto mt-2 w-36 bg-white dark:bg-slate-900 rounded-xl shadow-lg py-2 border border-slate-200 dark:border-slate-700">
+                {Object.entries(availableBranches).map(([key, name]) => (
+                    <button
+                        key={key}
+                        onClick={() => {
+                            setSelectedBranch(key);
+                            setIsOpen(false);
+                        }}
+                        className={`w-full text-left flex items-center gap-3 px-4 py-2 text-sm ${
+                            selectedBranch === key 
+                            ? 'font-semibold text-blue-600 dark:text-blue-300' 
+                            : 'text-slate-700 dark:text-slate-200'
+                        } hover:bg-blue-500/10 hover:text-blue-600 dark:hover:text-blue-300`}
+                    >
+                        {name}
+                    </button>
+                ))}
+            </div>
+        )}
+    </div>
+  );
+};
+
+
 export function Navbar() {
   const { theme, toggleTheme } = useTheme();
-  // --- FIX: Removed 'streak' from destructuring ---
   const { userInfo, logout, isAuthenticated } = useAuth();
-  // --- FIX: Get streak from userInfo ---
   const streak = userInfo?.streakData?.currentStreak || 0;
 
   const [dropdownOpen, setDropdownOpen] = useState(false);
-  const { dailyChallengeId, loadingChallenge } = useDailyChallenge(); // <-- Use hook
+  const { dailyChallengeId, loadingChallenge } = useDailyChallenge();
   const dropdownRef = useRef<HTMLDivElement>(null);
-
-  // <-- Add Log
-  console.log(`Navbar: loadingChallenge=${loadingChallenge}, dailyChallengeId=${dailyChallengeId}`); 
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -36,7 +99,7 @@ export function Navbar() {
   // Close profile dropdown when location changes
   const location = useLocation();
   useEffect(() => {
-    setDropdownOpen(false); // <--- MODIFIED: now closes profile dropdown
+    setDropdownOpen(false);
   }, [location]);
 
 
@@ -62,14 +125,16 @@ export function Navbar() {
           {/* Right side icons/buttons */}
           <div className="flex items-center gap-2">
             
-           {/* --- FIX: This logic now works perfectly --- */}
+            {/* --- NEW: BRANCH SELECTOR --- */}
+            <BranchSelector />
+            
            {isAuthenticated && streak > 0 && (
              <Link
-               to={!loadingChallenge && dailyChallengeId ? `/question/${dailyChallengeId}` : '/practice'} // Link to challenge or fallback
+               to={!loadingChallenge && dailyChallengeId ? `/question/${dailyChallengeId}` : '/practice'}
                className={`flex items-center gap-1.5 text-orange-500 dark:text-orange-400 font-bold bg-orange-500/10 dark:bg-orange-400/10 px-3 py-1.5 rounded-full transition-colors ${
-                 !loadingChallenge && dailyChallengeId ? 'hover:bg-orange-500/20 dark:hover:bg-orange-400/20 cursor-pointer' : 'cursor-default' // Add hover effect if link is active
+                 !loadingChallenge && dailyChallengeId ? 'hover:bg-orange-500/20 dark:hover:bg-orange-400/20 cursor-pointer' : 'cursor-default'
                }`}
-               title={!loadingChallenge && dailyChallengeId ? "Go to Daily Challenge" : "Practice Questions"} // Add tooltip
+               title={!loadingChallenge && dailyChallengeId ? "Go to Daily Challenge" : "Practice Questions"}
              >
                <Flame className="w-5 h-5 fill-current" />
                <span className="text-sm">{streak}</span>
@@ -90,9 +155,9 @@ export function Navbar() {
                   <ChevronDown className={`w-5 h-5 text-slate-500 transition-transform ${dropdownOpen ? 'rotate-180' : ''}`} />
                 </button>
                 {dropdownOpen && (
-                  <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-slate-900 rounded-xl shadow-lg py-2 border border-slate-200 dark:border-slate-700"> {/* Removed opacity/blur */}
+                  <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-slate-900 rounded-xl shadow-lg py-2 border border-slate-200 dark:border-slate-700">
                     
-                    {/* <--- NEW: Mobile-Only Dropdown Menu ---> */}
+                    {/* Mobile-Only Dropdown Menu */}
                     <div className="md:hidden">
                       <DropdownLink
                         to="/"
@@ -145,7 +210,7 @@ export function Navbar() {
                       </button>
                     </div>
 
-                    {/* <--- NEW: Desktop-Only Dropdown Menu ---> */}
+                    {/* Desktop-Only Dropdown Menu */}
                     <div className="hidden md:block">
                       <DropdownLink
                         to={userInfo.username ? `/profile/${userInfo.username}` : '#'}
@@ -180,21 +245,16 @@ export function Navbar() {
             ) : (
               <Link
                 to="/login"
-                // <--- MODIFIED: Removed hidden md:block --->
                 className="px-4 py-2 bg-blue-600 text-white rounded-full hover:bg-blue-700 transition-colors text-sm font-medium shadow-sm hover:shadow-md"
               >
                 Login / Sign Up
               </Link>
             )}
 
-            {/* <--- REMOVED: Burger Menu Button (Mobile only) ---> */}
-
           </div>
         </div>
       </div>
       
-      {/* <--- REMOVED: Mobile Menu Dropdown (Links) ---> */}
-
     </nav>
   );
 }
@@ -205,7 +265,6 @@ const NavLinkItem = ({ to, label, icon }: { to: string, label: string, icon?: Re
     return (
         <Link
             to={to}
-            // <--- MODIFIED: Reverted to desktop-only style (rounded-full) --->
             className={`flex items-center gap-2 text-sm font-medium transition-all duration-200 px-3 py-2 rounded-full ${
                 isActive
                 ? 'bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-300'
@@ -218,8 +277,6 @@ const NavLinkItem = ({ to, label, icon }: { to: string, label: string, icon?: Re
     )
 }
 
-// <--- MODIFIED: Made icon optional for links like Home/Practice --->
-// --- FIX: Corrected onClick type from ()-> void to () => void ---
 const DropdownLink = ({ to, onClick, icon, label }: { to: string, onClick: () => void, icon?: React.ReactNode, label: string }) => (
     <Link
       to={to}
@@ -240,4 +297,3 @@ const DropdownButton = ({ onClick, icon, label }: { onClick: () => void, icon: R
     {label}
   </button>
 )
-

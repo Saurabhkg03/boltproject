@@ -30,8 +30,6 @@ interface AuthContextType {
   deleteAccount: () => Promise<void>;
   isAuthenticated: boolean;
   loading: boolean;
-  // MODIFIED: Removed streak, as it's now part of userInfo.streakData
-  // streak: number; 
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -40,8 +38,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [userInfo, setUserInfo] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  // MODIFIED: Removed streak state
-  // const [streak, setStreak] = useState(0); 
 
   useEffect(() => {
     // This outer unsubscribe is for onAuthStateChanged
@@ -60,14 +56,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     const userDocRef = doc(db, 'users', currentUser.uid);
 
                     // --- MODIFICATION: Use onSnapshot for real-time updates ---
-                    // This one listener will power the entire app (Navbar, Profile, etc.)
-                    // with real-time stats updated by our (simulated) Cloud Function.
                     unsubscribeSnapshot = onSnapshot(userDocRef, (userDocSnap) => {
                         if (userDocSnap.exists()) {
                             console.log("Real-time user data received:", userDocSnap.data());
                             const userData = userDocSnap.data() as User;
                             
-                            // Ensure data is valid before setting
+                            // --- NEW: Ensure new branch-specific fields exist ---
+                            if (!userData.branchStats) { userData.branchStats = {}; }
+                            if (!userData.ratings) { userData.ratings = {}; }
+                            if (!userData.branchActivityCalendar) { userData.branchActivityCalendar = {}; }
+                            if (!userData.branchStreakData) { userData.branchStreakData = {}; }
+
+                            // Ensure old stats exist for migration/safety
                             if (!userData.stats) { userData.stats = { attempted: 0, correct: 0, accuracy: 0, subjects: {} }; }
                             if (!userData.streakData) { userData.streakData = { currentStreak: 0, lastSubmissionDate: '' }; }
                             if (!userData.activityCalendar) { userData.activityCalendar = {}; }
@@ -79,33 +79,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                             // This is a one-time setup for a new Google user.
                             console.log("Google user exists in Auth but not Firestore. Creating Firestore doc.");
                             
-                            // This is an async operation, but it's fine as it only runs once.
-                            // We do this inside the snapshot callback to avoid a race condition.
                             (async () => {
-                                // We can't use the 'loginWithGoogle' logic here as it causes a loop.
-                                // We'll just create the user doc.
                                 let usernameToSet = currentUser.email ? currentUser.email.split('@')[0].toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 15) : `user_${currentUser.uid.slice(-6)}`;
                                 if (usernameToSet.length < 3) usernameToSet = `user_${currentUser.uid.slice(-6)}`;
                                 
-                                // Simple check for username, not as robust as signup, but necessary.
                                 const q = query(collection(db, 'users'), where('username', '==', usernameToSet), limit(1));
                                 const querySnapshot = await getDocs(q);
                                 if (!querySnapshot.empty) {
                                     usernameToSet = `user_${currentUser.uid.slice(-6)}`;
                                 }
 
+                                // --- FIXED: Initialize all new branch-specific fields ---
                                 const newUser: User = {
                                     uid: currentUser.uid,
                                     name: currentUser.displayName || 'New User',
                                     username: usernameToSet, 
                                     email: currentUser.email || '',
                                     joined: new Date().toISOString(),
+                                    avatar: currentUser.photoURL || '/user.png',
+                                    role: 'user',
+                                    needsSetup: !currentUser.displayName,
+                                    
+                                    // Initialize new branch fields
+                                    ratings: {},
+                                    branchStats: {},
+                                    branchActivityCalendar: {},
+                                    branchStreakData: {},
+
+                                    // Initialize old fields for safety (can be removed after migration)
                                     stats: { attempted: 0, correct: 0, accuracy: 0, subjects: {} },
                                     streakData: { currentStreak: 0, lastSubmissionDate: '' },
                                     activityCalendar: {},
-                                    avatar: currentUser.photoURL || '/user.png',
-                                    role: 'user',
-                                    needsSetup: !currentUser.displayName
+                                    rating: 0
                                 };
                                 await setDoc(userDocRef, newUser);
                                 setUserInfo(newUser); // Set the new user in state
@@ -151,10 +156,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []); // Run only once on mount
 
-  // --- MODIFIED: REMOVED the entire useEffect for calculateStreak ---
-  // This is no longer needed. The streak is provided in real-time
-  // by the onSnapshot listener above.
-
   const login = async (email: string, password: string) => {
     const userCredential = await signInWithEmailAndPassword(auth, email, password);
     // Check verification status AFTER successful sign-in
@@ -191,7 +192,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.log("Verification email sent to:", email);
     } catch (verificationError) {
         console.error("Error sending verification email:", verificationError);
-        // This is a critical failure, we should probably delete the auth user
         try {
             await deleteUser(userCredential.user);
             console.log("Auth user deleted due to verification email failure.");
@@ -207,25 +207,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.log("Auth profile display name updated.");
     } catch (profileError) {
         console.error("Error updating Auth profile display name:", profileError);
-        // Non-critical, proceed but log error
     }
 
-    // --- Create user document in Firestore ---
-    // This is the "initial" document. The migration script/cloud function
-    // will fill in the rest of the data.
+    // --- FIXED: Initialize all new branch-specific fields ---
     const newUser: User = {
       uid: userCredential.user.uid,
       name,
       username: saneUsername,
       email: email,
       joined: new Date().toISOString(),
-      // Initialize all stats objects
-      stats: { attempted: 0, correct: 0, accuracy: 0, subjects: {} },
-      streakData: { currentStreak: 0, lastSubmissionDate: '' },
-      activityCalendar: {},
       avatar: userCredential.user.photoURL || '/user.png',
       role: 'user',
       needsSetup: false, // Set to false as name/username are provided
+      
+      // Initialize new branch fields
+      ratings: {},
+      branchStats: {},
+      branchActivityCalendar: {},
+      branchStreakData: {},
+
+      // Initialize old fields for safety
+      stats: { attempted: 0, correct: 0, accuracy: 0, subjects: {} },
+      streakData: { currentStreak: 0, lastSubmissionDate: '' },
+      activityCalendar: {},
+      rating: 0
     };
     await setDoc(doc(db, 'users', newUser.uid), newUser);
     console.log("User document created in Firestore for:", newUser.uid);
@@ -273,19 +278,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             }
         }
 
+        // --- FIXED: Initialize all new branch-specific fields ---
         const newUser: User = {
             uid: googleUser.uid,
             name: googleUser.displayName || 'New User',
             username: finalUsername, // Use the unique username
             email: googleUser.email || '',
             joined: new Date().toISOString(),
-            // Initialize all stats objects
+            avatar: googleUser.photoURL || '/user.png',
+            role: 'user',
+            needsSetup: !googleUser.displayName, // Needs setup if no display name from Google
+            
+            // Initialize new branch fields
+            ratings: {},
+            branchStats: {},
+            branchActivityCalendar: {},
+            branchStreakData: {},
+
+            // Initialize old fields for safety
             stats: { attempted: 0, correct: 0, accuracy: 0, subjects: {} },
             streakData: { currentStreak: 0, lastSubmissionDate: '' },
             activityCalendar: {},
-            avatar: googleUser.photoURL || '/user.png',
-            role: 'user',
-            needsSetup: !googleUser.displayName // Needs setup if no display name from Google
+            rating: 0
         };
         await setDoc(userDocRef, newUser);
         // setUserInfo(newUser); // Let onAuthStateChanged handle this
@@ -294,7 +308,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.log("Google Sign-in: Existing user. Firestore doc exists.");
         // setUserInfo(userDocSnap.data() as User); // Let onAuthStateChanged handle this
     }
-    // No need to navigate here, onAuthStateChanged will trigger update and AppContent handles redirect if needed
   };
 
   const logout = () => {
@@ -353,7 +366,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Clear local state immediately
         setUserInfo(null);
         setUser(null);
-        // setStreak(0); // State removed
 
     } catch (error: any) {
         console.error("Error deleting account:", error);
@@ -376,8 +388,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       deleteAccount,
       // User is authenticated IF firebase auth user exists AND userInfo is loaded (implies verification for email/pass)
       isAuthenticated: !!user && !!userInfo,
-      loading,
-      // streak // REMOVED
+      loading
     }}>
       {!loading && children}
     </AuthContext.Provider>

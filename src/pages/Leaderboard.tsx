@@ -5,21 +5,17 @@ import { db } from '../firebase';
 import { collection, getDocs, query, orderBy, limit, startAfter, getCountFromServer, DocumentSnapshot, endBefore, limitToLast } from 'firebase/firestore';
 import { User } from '../data/mockData';
 import { useAuth } from '../contexts/AuthContext';
+// --- NEW: Import metadata context to get the selected branch ---
+import { useMetadata } from '../contexts/MetadataContext';
 import { LeaderboardSkeleton } from '../components/Skeletons';
 
 const PAGE_SIZE = 10;
-const RATING_SCALING_FACTOR = 100;
+const RATING_SCALING_FACTOR = 100; // Only used for modal text
 
-// --- RATING FUNCTION (for modal display only) ---
-const calculateRating = (accuracy: number | undefined, correct: number | undefined): number => {
-    const safeAccuracy = accuracy ?? 0;
-    const safeCorrect = correct ?? 0;
-    // Rating = (Accuracy / 100) * log10(CorrectlySolved + 1) * ScalingFactor
-    const rating = Math.max(0, (safeAccuracy / 100) * Math.log10(safeCorrect + 1) * RATING_SCALING_FACTOR);
-    return parseFloat(rating.toFixed(2));
-};
-
-// --- PODIUM CARD COMPONENT ---
+// --- PODIUM CARD COMPONENT (Unchanged) ---
+// This component is generic and just displays the user data it's given.
+// Since we will pass it a user object with branch-specific stats/rating,
+// it will work correctly without any changes.
 const PodiumCard = ({ user, rank }: { user: User; rank: number }) => {
   const rankStyles: Record<number, any> = {
     1: { gradient: 'from-amber-400 to-yellow-500', shadow: 'shadow-yellow-500/40', iconColor: 'text-amber-600 dark:text-amber-300', ring: 'ring-yellow-400', order: 'order-1 md:order-2', height: 'mt-0 md:-mt-6' },
@@ -44,10 +40,12 @@ const PodiumCard = ({ user, rank }: { user: User; rank: number }) => {
         <div className={`mt-3 w-full bg-gradient-to-r ${styles.gradient} p-2 rounded-lg`}>
           <div className="flex justify-around items-center text-white">
             <div className="text-center">
+              {/* This now correctly shows the branch-specific rating */}
               <p className="font-bold text-lg">{user.rating ?? 0}</p>
               <p className="text-xs opacity-80">Rating</p>
             </div>
               <div className="text-center">
+              {/* This now correctly shows the branch-specific solve count */}
               <p className="font-bold text-lg">{user.stats?.correct ?? 0}</p>
               <p className="text-xs opacity-80">Solved</p>
             </div>
@@ -58,7 +56,7 @@ const PodiumCard = ({ user, rank }: { user: User; rank: number }) => {
   );
 };
 
-// --- Rating Explanation Modal Component ---
+// --- Rating Explanation Modal Component (Unchanged) ---
 const RatingInfoModal = ({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) => {
     if (!isOpen) return null;
 
@@ -103,7 +101,7 @@ const RatingInfoModal = ({ isOpen, onClose }: { isOpen: boolean; onClose: () => 
                         <li><strong className="dark:text-white">{RATING_SCALING_FACTOR}:</strong> This simply scales the result to make the rating number easier to read (e.g., 150 instead of 1.5).</li>
                     </ul>
                     <p className="text-xs pt-2 text-slate-500 dark:text-slate-400">
-                      Note: This rating is pre-calculated and updated in real-time with every submission to ensure the leaderboard is always accurate.
+                      Note: This rating is pre-calculated for each branch and updated with every submission to ensure the leaderboard is always accurate.
                     </p>
                 </div>
             </div>
@@ -115,18 +113,29 @@ const RatingInfoModal = ({ isOpen, onClose }: { isOpen: boolean; onClose: () => 
 // --- MAIN LEADERBOARD COMPONENT ---
 export function Leaderboard() {
   const { loading: authLoading } = useAuth();
+  // --- NEW: Get branch info from context ---
+  const { selectedBranch, availableBranches, loading: metadataLoading } = useMetadata();
+
   const [leaderboard, setLeaderboard] = useState<User[]>([]);
   const [loadingData, setLoadingData] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [isInfoModalOpen, setIsInfoModalOpen] = useState(false); // State for modal
+  const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
 
   const [currentPage, setCurrentPage] = useState(1);
   const [firstVisible, setFirstVisible] = useState<DocumentSnapshot | null>(null);
   const [lastVisible, setLastVisible] = useState<DocumentSnapshot | null>(null);
   const [totalUsers, setTotalUsers] = useState(0);
 
-  // Fetch Leaderboard Data with Pagination and Rating Calculation
+  // --- UPDATED: Fetch Leaderboard Data ---
   const fetchLeaderboard = useCallback(async (page: number, direction: 'next' | 'prev' | 'first' = 'first') => {
+    // --- NEW: Wait for branch to be selected ---
+    if (!selectedBranch) {
+      console.log("[Leaderboard] Waiting for selectedBranch...");
+      setLoadingData(true);
+      return;
+    }
+
+    console.log(`[Leaderboard] Fetching page ${page} for branch ${selectedBranch}`);
     if (direction === 'first') setLoadingData(true);
     else setLoadingMore(true);
 
@@ -141,9 +150,8 @@ export function Leaderboard() {
       }
 
       // --- *** THE FIX *** ---
-      // We no longer sort by stats.correct. We sort directly by the
-      // pre-calculated 'rating' field, which is accurate and indexed.
-      let q = query(usersCollection, orderBy('rating', 'desc'));
+      // Sort directly by the branch-specific rating field (e.g., 'ratings.ece')
+      let q = query(usersCollection, orderBy(`ratings.${selectedBranch}`, 'desc'));
 
       // Apply pagination logic based on cursors
       if (direction === 'next' && lastVisible) {
@@ -156,25 +164,26 @@ export function Leaderboard() {
 
       const usersSnapshot = await getDocs(q);
       
-      // Map Firestore data and ensure stats exist
+      // --- NEW: Map Firestore data to include branch-specific stats/rating ---
       const usersData = usersSnapshot.docs.map(doc => {
           const data = doc.data() as User;
-          // Ensure stats object and its properties exist, default to 0
-          if (!data.stats) {
-              data.stats = { attempted: 0, correct: 0, accuracy: 0, subjects: {} };
-          }
-          // Ensure rating exists
-          if (data.rating === undefined) {
-              data.rating = 0;
-          }
-          return data;
+          
+          // Get the stats for the *currently selected branch*, or default to 0
+          const branchStats = data.branchStats?.[selectedBranch] || { attempted: 0, correct: 0, accuracy: 0, subjects: {} };
+          // Get the rating for the *currently selected branch*, or default to 0
+          const branchRating = data.ratings?.[selectedBranch] || 0;
+
+          // Return a user object where 'stats' and 'rating' are overridden
+          // with the branch-specific values for the components to use.
+          return {
+            ...data,
+            stats: branchStats,
+            rating: branchRating,
+          };
       });
       // --- *** END OF FIX *** ---
 
-      console.log(`Firestore Leaderboard: Fetched ${usersSnapshot.docs.length} users.`);
-
-      // NO MORE CLIENT-SIDE SORTING NEEDED
-      // The data is already sorted correctly by Firestore.
+      console.log(`Firestore Leaderboard: Fetched ${usersSnapshot.docs.length} users for branch ${selectedBranch}.`);
 
       setLeaderboard(direction === 'prev' ? usersData.reverse() : usersData);
 
@@ -196,22 +205,24 @@ export function Leaderboard() {
 
     } catch (error) {
       console.error("Error fetching leaderboard data:", error);
-      // You may need to create this index in Firestore!
       if ((error as any).code === 'failed-precondition') {
-          console.error("INDEXING ERROR: Please create a descending index on the 'rating' field in the 'users' collection.");
+          console.error(`INDEXING ERROR: Please create a descending index on the 'ratings.${selectedBranch}' field in the 'users' collection.`);
       }
       setLeaderboard([]); setTotalUsers(0); setFirstVisible(null); setLastVisible(null);
     } finally {
       setLoadingData(false); setLoadingMore(false);
     }
-  }, [firstVisible, lastVisible]); // Depend on cursors for pagination
+  }, [firstVisible, lastVisible, selectedBranch]); // --- NEW: Added selectedBranch dependency ---
 
-  // Initial fetch on component mount
+  // --- UPDATED: Initial fetch on component mount ---
   useEffect(() => {
-    setFirstVisible(null); setLastVisible(null); // Reset cursors for initial load
-    fetchLeaderboard(1, 'first');
+    // Only fetch if branch is ready
+    if (selectedBranch) {
+      setFirstVisible(null); setLastVisible(null); // Reset cursors for initial load
+      fetchLeaderboard(1, 'first');
+    }
    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Run only once
+  }, [selectedBranch]); // --- NEW: Runs when selectedBranch changes ---
 
   // Pagination handlers
   const handleNextPage = () => {
@@ -229,9 +240,12 @@ export function Leaderboard() {
   const totalPages = Math.max(1, Math.ceil(totalUsers / PAGE_SIZE));
   const topThreePodium = !loadingData && currentPage === 1 ? leaderboard.slice(0, 3) : [];
   const listUsers = !loadingData && currentPage === 1 ? leaderboard.slice(topThreePodium.length) : leaderboard;
+  
+  // --- NEW: Get branch name for display ---
+  const branchName = availableBranches[selectedBranch] || 'Overall';
 
-  // Show skeleton if auth is loading OR initial data is loading
-  if (authLoading || loadingData) {
+  // Show skeleton if auth is loading OR initial data is loading OR metadata is loading
+  if (authLoading || loadingData || metadataLoading) {
     return <LeaderboardSkeleton />;
   }
 
@@ -243,7 +257,8 @@ export function Leaderboard() {
         <div className="text-center mb-6">
           <div className="inline-flex items-center justify-center gap-3 mb-1">
             <Trophy className="w-8 h-8 text-yellow-400" />
-            <h1 className="text-3xl font-bold text-slate-900 dark:text-white">Leaderboard</h1>
+            {/* --- UPDATED: Title now includes branch name --- */}
+            <h1 className="text-3xl font-bold text-slate-900 dark:text-white">Leaderboard ({branchName})</h1>
             {/* Info Button */}
             <button
               onClick={() => setIsInfoModalOpen(true)}
@@ -255,8 +270,8 @@ export function Leaderboard() {
           </div>
            <p className="text-slate-600 dark:text-slate-400 text-sm">
              {totalUsers > 0
-               ? `Showing ranks ${ (currentPage - 1) * PAGE_SIZE + 1 }-${ Math.min(currentPage * PAGE_SIZE, totalUsers) } of ${totalUsers} users (ranked by rating)`
-               : 'Top performers in GATE ECE preparation'
+               ? `Showing ranks ${ (currentPage - 1) * PAGE_SIZE + 1 }-${ Math.min(currentPage * PAGE_SIZE, totalUsers) } of ${totalUsers} total users`
+               : `Top performers for ${branchName}`
              }
            </p>
         </div>
@@ -277,7 +292,6 @@ export function Leaderboard() {
           {loadingMore && <div className="absolute inset-0 bg-white/50 dark:bg-black/50 flex items-center justify-center z-10"><div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div></div>}
           <div>
             {listUsers.map((user, index) => {
-              // Calculate rank based on current page and index within the list portion
               const rankOffset = currentPage === 1 ? topThreePodium.length : 0;
               const rank = (currentPage - 1) * PAGE_SIZE + rankOffset + index + 1;
 
@@ -305,11 +319,13 @@ export function Leaderboard() {
                       {/* Rating */}
                       <div className="flex items-center justify-end gap-1 sm:gap-1.5 text-blue-600 dark:text-blue-400 text-xs sm:text-sm min-w-[60px] sm:min-w-[70px]" title="Performance Rating">
                         <BarChart className="w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0" />
-                        <span className="font-semibold">{user.rating ?? 0}</span> {/* Display rating */}
+                        {/* This now correctly shows the branch-specific rating */}
+                        <span className="font-semibold">{user.rating ?? 0}</span>
                       </div>
                       {/* Accuracy */}
                       <div className="flex items-center justify-end gap-1 sm:gap-1.5 text-emerald-600 dark:text-emerald-400 text-xs sm:text-sm min-w-[50px] sm:min-w-[60px]" title="Accuracy">
                         <Target className="w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0" />
+                        {/* This now correctly shows the branch-specific accuracy */}
                         <span className="font-semibold">{(user.stats?.accuracy ?? 0).toFixed(1)}%</span>
                       </div>
                   </div>
@@ -329,7 +345,7 @@ export function Leaderboard() {
                 <button
                 onClick={handlePrevPage}
                 disabled={currentPage === 1 || loadingMore}
-                className="pagination-button" /* Use class defined in style tag */
+                className="pagination-button"
                 >
                 <ChevronLeft className="w-4 h-4" /> Previous
                 </button>
@@ -339,7 +355,7 @@ export function Leaderboard() {
                 <button
                 onClick={handleNextPage}
                 disabled={currentPage === totalPages || loadingMore || leaderboard.length < PAGE_SIZE || !lastVisible}
-                className="pagination-button" /* Use class defined in style tag */
+                className="pagination-button"
                 >
                 Next <ChevronRight className="w-4 h-4" />
                 </button>
