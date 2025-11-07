@@ -1,5 +1,6 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Moon, Sun, Code2, LogOut, User, Shield, Settings, ChevronDown, Flame, BookCopy } from 'lucide-react';
+import { Moon, Sun, LogOut, User, Shield, Settings, ChevronDown, Flame, BookCopy } from 'lucide-react';
+// --- FIX: Re-added .tsx extension to context imports ---
 import { useTheme } from '../contexts/ThemeContext.tsx';
 import { useAuth } from '../contexts/AuthContext.tsx';
 import { useDailyChallenge } from '../contexts/DailyChallengeContext.tsx';
@@ -108,7 +109,13 @@ export function Navbar() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
           <Link to="/" className="flex items-center gap-2 font-bold text-xl text-slate-800 dark:text-white">
-            <Code2 className="w-6 h-6 text-blue-500" />
+            {/* --- UPDATED LOGO --- */}
+            <img 
+              src="/logo.png"
+              alt="GATECode Logo" 
+              className="w-10 h-10" 
+            />
+            {/* --- END UPDATED LOGO --- */}
             <span>GATECode</span>
           </Link>
 

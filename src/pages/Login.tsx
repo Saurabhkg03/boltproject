@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Code2, Mail, Lock, User as UserIcon, AtSign, Loader2, AlertCircle, CheckCircle, ArrowLeft } from 'lucide-react';
+import { Mail, Lock, User as UserIcon, AtSign, Loader2, AlertCircle, CheckCircle, ArrowLeft } from 'lucide-react';
 // Correcting the import path again, adding the .tsx extension explicitly
 import { useAuth } from '../contexts/AuthContext.tsx';
+// --- REMOVED: useTheme no longer needed for logo ---
 
 
 // Correct Google Icon SVG
@@ -22,6 +23,7 @@ type AuthMode = 'login' | 'signup' | 'forgotPassword';
 export function Login() {
     const navigate = useNavigate();
     const { login, signup, loginWithGoogle, resetPassword } = useAuth();
+    // --- REMOVED: theme state no longer needed ---
 
     const [mode, setMode] = useState<AuthMode>('login');
     const [loading, setLoading] = useState(false);
@@ -166,7 +168,13 @@ export function Login() {
                 {/* Header */}
                 <div className="text-center mb-8">
                     <Link to="/" className="inline-flex items-center gap-2 text-3xl font-bold text-blue-600 dark:text-blue-400 mb-2 transition-transform duration-200 hover:scale-105">
-                        <Code2 className="w-8 h-8" />
+                        {/* --- UPDATED LOGO --- */}
+                        <img 
+                          src="/logo.png" 
+                          alt="GATECode Logo" 
+                          className="w-12 h-12"
+                        />
+                        {/* --- END UPDATED LOGO --- */}
                         <span>GATECode</span>
                     </Link>
                     <p className="text-gray-600 dark:text-gray-400">Master GATE ECE preparation</p>
@@ -320,5 +328,3 @@ export function Login() {
         </div>
     );
 }
-
-
