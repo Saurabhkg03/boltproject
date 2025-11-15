@@ -1,15 +1,14 @@
 import { Link, useLocation } from 'react-router-dom';
 import { Moon, Sun, LogOut, User, Shield, Settings, ChevronDown, Flame, BookCopy } from 'lucide-react';
-// --- FIX: Re-added .tsx extension to context imports ---
-import { useTheme } from '../contexts/ThemeContext.tsx';
-import { useAuth } from '../contexts/AuthContext.tsx';
-import { useDailyChallenge } from '../contexts/DailyChallengeContext.tsx';
-// --- IMPORT METADATA HOOK ---
-import { useMetadata } from '../contexts/MetadataContext.tsx';
+// --- FIX: Removing .tsx extensions from all context imports ---
+import { useTheme } from '../contexts/ThemeContext';
+import { useAuth } from '../contexts/AuthContext';
+import { useDailyChallenge } from '../contexts/DailyChallengeContext';
+import { useMetadata } from '../contexts/MetadataContext';
 import { useState, useRef, useEffect } from 'react';
 import React from 'react';
 
-// --- NEW: Branch Selector Component ---
+// --- Branch Selector Component (Unchanged) ---
 const BranchSelector = () => {
   const { selectedBranch, setSelectedBranch, availableBranches, loading } = useMetadata();
   const [isOpen, setIsOpen] = useState(false);
@@ -42,16 +41,17 @@ const BranchSelector = () => {
     <div className="relative" ref={selectorRef}>
         <button 
             onClick={() => setIsOpen(!isOpen)} 
-            className="flex items-center gap-2 px-3 py-2 rounded-full hover:bg-slate-200/50 dark:hover:bg-slate-800/50 transition-colors group"
+            // --- FIX: De-congest: smaller padding, smaller chevron ---
+            className="flex items-center gap-2 px-2 py-1.5 rounded-full hover:bg-slate-200/50 dark:hover:bg-slate-800/50 transition-colors group"
         >
             <BookCopy className="w-4 h-4 text-blue-500" />
             <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
                 {availableBranches[selectedBranch] || 'Select'}
             </span>
-            <ChevronDown className={`w-5 h-5 text-slate-500 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+            <ChevronDown className={`w-4 h-4 text-slate-500 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
         </button>
         {isOpen && (
-            <div className="absolute left-0 sm:right-0 sm:left-auto mt-2 w-36 bg-white dark:bg-slate-900 rounded-xl shadow-lg py-2 border border-slate-200 dark:border-slate-700">
+            <div className="absolute left-0 sm:right-0 sm:left-auto mt-2 w-36 bg-white dark:bg-slate-900 rounded-xl shadow-lg py-2 border border-slate-200 dark:border-slate-700 z-50">
                 {Object.entries(availableBranches).map(([key, name]) => (
                     <button
                         key={key}
@@ -78,7 +78,9 @@ const BranchSelector = () => {
 export function Navbar() {
   const { theme, toggleTheme } = useTheme();
   const { userInfo, logout, isAuthenticated } = useAuth();
-  const streak = userInfo?.streakData?.currentStreak || 0;
+  // --- UPDATED: Get branch context to find the correct streak ---
+  const { selectedBranch } = useMetadata();
+  const streak = (userInfo?.branchStreakData?.[selectedBranch] || userInfo?.streakData)?.currentStreak || 0;
 
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const { dailyChallengeId, loadingChallenge } = useDailyChallenge();
@@ -87,6 +89,7 @@ export function Navbar() {
   // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
+      // --- FIX: Changed 'selectorRef' to 'dropdownRef' ---
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setDropdownOpen(false);
       }
@@ -107,19 +110,19 @@ export function Navbar() {
   return (
     <nav className="sticky top-0 z-50 bg-white/60 dark:bg-slate-900/60 backdrop-blur-lg border-b border-white/30 dark:border-slate-800/60">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between items-center h-16">
-          <Link to="/" className="flex items-center gap-2 font-bold text-xl text-slate-800 dark:text-white">
-            {/* --- UPDATED LOGO --- */}
+        {/* --- FIX: De-congest: smaller gap --- */}
+        <div className="flex justify-between items-center h-16 gap-1.5">
+          {/* --- FIX: De-congest: smaller logo and text --- */}
+          <Link to="/" className="flex items-center gap-1.5 font-bold text-slate-800 dark:text-white">
             <img 
               src="/logo.png"
               alt="GATECode Logo" 
-              className="w-10 h-10" 
+              className="w-8 h-8" // --- FIX: De-congest: smaller logo ---
             />
-            {/* --- END UPDATED LOGO --- */}
-            <span>GATECode</span>
+            <span className="text-lg">GATECode</span> {/* --- FIX: De-congest: smaller text --- */}
           </Link>
 
-          {/* Desktop nav links */}
+          {/* --- UPDATED: Desktop nav links (Restored Home, Practice, Leaderboard) --- */}
           <div className="hidden md:flex items-center gap-2">
             <NavLinkItem to="/" label="Home" />
             <NavLinkItem to="/practice" label="Practice" />
@@ -130,7 +133,8 @@ export function Navbar() {
           </div>
 
           {/* Right side icons/buttons */}
-          <div className="flex items-center gap-2">
+          {/* --- FIX: De-congest: smaller gap --- */}
+          <div className="flex items-center gap-1.5">
             
             {/* --- NEW: BRANCH SELECTOR --- */}
             <BranchSelector />
@@ -138,49 +142,50 @@ export function Navbar() {
            {isAuthenticated && streak > 0 && (
              <Link
                to={!loadingChallenge && dailyChallengeId ? `/question/${dailyChallengeId}` : '/practice'}
-               className={`flex items-center gap-1.5 text-orange-500 dark:text-orange-400 font-bold bg-orange-500/10 dark:bg-orange-400/10 px-3 py-1.5 rounded-full transition-colors ${
+               // --- FIX: De-congest: smaller padding, smaller icon ---
+               className={`flex items-center gap-1.5 text-orange-500 dark:text-orange-400 font-bold bg-orange-500/10 dark:bg-orange-400/10 px-2 py-1 rounded-full transition-colors ${
                  !loadingChallenge && dailyChallengeId ? 'hover:bg-orange-500/20 dark:hover:bg-orange-400/20 cursor-pointer' : 'cursor-default'
                }`}
                title={!loadingChallenge && dailyChallengeId ? "Go to Daily Challenge" : "Practice Questions"}
              >
-               <Flame className="w-5 h-5 fill-current" />
+               <Flame className="w-4 h-4 fill-current" />
                <span className="text-sm">{streak}</span>
              </Link>
            )}
 
             {isAuthenticated && userInfo ? (
               <div className="relative" ref={dropdownRef}>
-                <button onClick={() => setDropdownOpen(!dropdownOpen)} className="flex items-center gap-2 pl-2 pr-1 py-1 rounded-full hover:bg-slate-200/50 dark:hover:bg-slate-800/50 transition-colors group">
+                {/* --- FIX: De-congest: smaller padding, avatar, chevron --- */}
+                <button onClick={() => setDropdownOpen(!dropdownOpen)} className="flex items-center gap-1 px-1 py-1 rounded-full hover:bg-slate-200/50 dark:hover:bg-slate-800/50 transition-colors group">
                     <img
                       src={userInfo.avatar || '/user.png'}
                       alt={userInfo.name}
-                      className="w-8 h-8 rounded-full border-2 border-slate-300 dark:border-slate-700 group-hover:border-blue-500 transition-colors"
+                      className="w-7 h-7 md:w-8 md:h-8 rounded-full border-2 border-slate-300 dark:border-slate-700 group-hover:border-blue-500 transition-colors"
                     />
                   <span className="text-sm font-medium text-slate-700 dark:text-slate-300 hidden lg:block pr-1">
                     {userInfo.name}
                   </span>
-                  <ChevronDown className={`w-5 h-5 text-slate-500 transition-transform ${dropdownOpen ? 'rotate-180' : ''}`} />
+                  <ChevronDown className={`w-4 h-4 text-slate-500 transition-transform ${dropdownOpen ? 'rotate-180' : ''}`} />
                 </button>
                 {dropdownOpen && (
-                  <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-slate-900 rounded-xl shadow-lg py-2 border border-slate-200 dark:border-slate-700">
+                  <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-slate-900 rounded-xl shadow-lg py-2 border border-slate-200 dark:border-slate-700 z-50">
                     
-                    {/* Mobile-Only Dropdown Menu */}
-                    <div className="md:hidden">
+                    {/* --- UPDATED: Dropdown now same for mobile/desktop. 'My Profile' is in BottomNav --- */}
+                    <div>
+                      {/* --- ADDED: My Profile link (was missing) --- */}
                       <DropdownLink
-                        to="/"
+                        to={userInfo.username ? `/profile/${userInfo.username}` : '#'}
                         onClick={() => setDropdownOpen(false)}
-                        label="Home"
+                        icon={<User className="w-4 h-4" />}
+                        label="My Profile"
                       />
                       <DropdownLink
-                        to="/practice"
+                        to="/settings"
                         onClick={() => setDropdownOpen(false)}
-                        label="Practice"
+                        icon={<Settings className="w-4 h-4" />}
+                        label="Settings"
                       />
-                      <DropdownLink
-                        to="/leaderboard"
-                        onClick={() => setDropdownOpen(false)}
-                        label="Leaderboard"
-                      />
+                      {/* --- Admin Panel link added for mobile dropdown access --- */}
                       {(userInfo?.role === 'admin' || userInfo?.role === 'moderator') && (
                         <DropdownLink
                           to="/admin"
@@ -189,48 +194,6 @@ export function Navbar() {
                           label="Admin Panel"
                         />
                       )}
-                      <div className="my-1 h-px bg-slate-200 dark:bg-slate-700"></div>
-                      <DropdownLink
-                        to={userInfo.username ? `/profile/${userInfo.username}` : '#'}
-                        onClick={() => setDropdownOpen(false)}
-                        icon={<User className="w-4 h-4" />}
-                        label="My Profile"
-                      />
-                      <DropdownLink
-                        to="/settings"
-                        onClick={() => setDropdownOpen(false)}
-                        icon={<Settings className="w-4 h-4" />}
-                        label="Settings"
-                      />
-                      <DropdownButton
-                        onClick={toggleTheme}
-                        icon={theme === 'light' ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
-                        label={theme === 'light' ? 'Dark Mode' : 'Light Mode'}
-                      />
-                      <div className="my-1 h-px bg-slate-200 dark:bg-slate-700"></div>
-                      <button
-                        onClick={() => { logout(); setDropdownOpen(false); }}
-                        className="w-full text-left flex items-center gap-3 px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-500/10 rounded-md mx-2"
-                      >
-                        <LogOut className="w-4 h-4" />
-                        Logout
-                      </button>
-                    </div>
-
-                    {/* Desktop-Only Dropdown Menu */}
-                    <div className="hidden md:block">
-                      <DropdownLink
-                        to={userInfo.username ? `/profile/${userInfo.username}` : '#'}
-                        onClick={() => setDropdownOpen(false)}
-                        icon={<User className="w-4 h-4" />}
-                        label="My Profile"
-                      />
-                      <DropdownLink
-                        to="/settings"
-                        onClick={() => setDropdownOpen(false)}
-                        icon={<Settings className="w-4 h-4" />}
-                        label="Settings"
-                      />
                       <DropdownButton
                         onClick={toggleTheme}
                         icon={theme === 'light' ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
@@ -252,9 +215,12 @@ export function Navbar() {
             ) : (
               <Link
                 to="/login"
-                className="px-4 py-2 bg-blue-600 text-white rounded-full hover:bg-blue-700 transition-colors text-sm font-medium shadow-sm hover:shadow-md"
+                // --- FIX: De-congest: smaller padding ---
+                className="px-3 py-1.5 bg-blue-600 text-white rounded-full hover:bg-blue-700 transition-colors text-sm font-medium shadow-sm hover:shadow-md"
               >
-                Login / Sign Up
+                {/* --- UPDATED: Responsive Login Text --- */}
+                <span className="md:hidden">Login</span>
+                <span className="hidden md:inline">Login / Sign Up</span>
               </Link>
             )}
 

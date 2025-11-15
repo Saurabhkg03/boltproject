@@ -1,10 +1,11 @@
 import { BrowserRouter, Routes, Route, useLocation, Navigate } from 'react-router-dom';
-// --- FIX: Add .tsx extensions to all local imports ---
+// --- FIX: Adding .tsx extensions back to all local imports ---
 import { ThemeProvider } from './contexts/ThemeContext.tsx';
 import { AuthProvider, useAuth } from './contexts/AuthContext.tsx';
 import { DailyChallengeProvider } from './contexts/DailyChallengeContext.tsx';
 import { MetadataProvider } from './contexts/MetadataContext.tsx'; 
 import { Navbar } from './components/Navbar.tsx';
+import { BottomNavbar } from './components/BottomNavbar.tsx';
 import { ProtectedRoute } from './components/ProtectedRoute.tsx';
 import { Home } from './pages/Home.tsx';
 import { Practice } from './pages/Practice.tsx';
@@ -49,12 +50,24 @@ const AppContent = () => {
   if (isAuthenticated && userInfo && userInfo.needsSetup && location.pathname !== '/settings') {
     return <Navigate to="/settings" state={{ from: location }} replace />;
   }
+  
+  const showNav = location.pathname !== '/login';
 
   return (
     <>
-      {/* Only show Navbar if not on the login page */}
-      {location.pathname !== '/login' && <Navbar />}
-      <main className="relative z-10">
+      {/* --- UPDATED: Show Top Nav always, Bottom Nav only on mobile --- */}
+      {showNav && (
+        <>
+          <Navbar /> {/* Always show top navbar */}
+          <div className="md:hidden"> {/* Wrapper to hide BottomNavbar on desktop */}
+            <BottomNavbar />
+          </div>
+        </>
+      )}
+      {/* --- END UPDATED --- */}
+
+      {/* --- UPDATED: Add padding-bottom for mobile nav --- */}
+      <main className="relative z-10 pb-16 md:pb-0">
         <Routes>
           {/* Public Routes */}
           <Route path="/" element={<Home />} />
@@ -127,4 +140,3 @@ function App() {
 }
 
 export default App;
-
