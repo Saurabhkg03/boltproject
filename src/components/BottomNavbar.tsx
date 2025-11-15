@@ -1,11 +1,11 @@
 import { Link, useLocation } from 'react-router-dom';
 import { Home, ClipboardList, BarChart3, User } from 'lucide-react';
-// --- FIX: Correcting context import path ---
+// --- FIX: Removing .tsx extension ---
 import { useAuth } from '../contexts/AuthContext';
 import React from 'react';
 
 // Reusable Nav Link Component
-const BottomNavLink = ({ to, icon: Icon, label }: { to: string; icon: React.ElementType; label: string; }) => {
+const BottomNavLink = ({ to, label, icon: Icon }: { to: string, label: string, icon: React.ElementType }) => {
   const location = useLocation();
   // Match base path, so /profile/username matches /profile
   const isActive = location.pathname === to || (to !== '/' && location.pathname.startsWith(to));
@@ -13,13 +13,13 @@ const BottomNavLink = ({ to, icon: Icon, label }: { to: string; icon: React.Elem
   return (
     <Link
       to={to}
-      className={`flex flex-col items-center justify-center gap-0.5 w-full h-16 transition-colors ${
+      // --- FIX: Make smaller (h-14) ---
+      className={`flex flex-col items-center justify-center gap-0.5 w-full h-14 transition-colors ${
         isActive
           ? 'text-blue-600 dark:text-blue-400'
           : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
       }`}
     >
-      {/* Apply fill-current if active for a "filled" icon look */}
       <Icon className={`w-6 h-6 ${isActive ? 'fill-current' : ''}`} strokeWidth={isActive ? 2.5 : 2} />
       <span className="text-xs font-medium">{label}</span>
     </Link>
@@ -35,7 +35,8 @@ export function BottomNavbar() {
     : '/login'; // Send to login if not authenticated
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-40 h-16 bg-white/60 dark:bg-slate-900/60 backdrop-blur-lg border-t border-white/30 dark:border-slate-800/60">
+    // --- UPDATED: Show only on mobile (md:hidden), make opaque, make smaller (h-14) ---
+    <nav className="fixed bottom-0 left-0 right-0 z-40 h-14 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 md:hidden">
       <div className="max-w-7xl mx-auto px-2 sm:px-6 lg:px-8 h-full">
         <div className="flex justify-around items-center h-full">
           <BottomNavLink to="/" label="Home" icon={Home} />

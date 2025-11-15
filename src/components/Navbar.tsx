@@ -122,7 +122,7 @@ export function Navbar() {
             <span className="text-lg">GATECode</span> {/* --- FIX: De-congest: smaller text --- */}
           </Link>
 
-          {/* --- UPDATED: Desktop nav links (Restored Home, Practice, Leaderboard) --- */}
+          {/* --- UPDATED: Links now hidden on mobile (md:flex) --- */}
           <div className="hidden md:flex items-center gap-2">
             <NavLinkItem to="/" label="Home" />
             <NavLinkItem to="/practice" label="Practice" />
