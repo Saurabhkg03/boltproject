@@ -3,14 +3,14 @@ import { useParams, Link } from 'react-router-dom';
 import { Calendar, Settings as SettingsIcon, CheckCircle, TrendingUp, Zap, BarChart, Loader2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { db } from '../firebase';
-import { 
-    collection, 
-    getDocs, 
-    query, 
-    where, 
-    orderBy, 
-    documentId, 
-    doc, 
+import {
+    collection,
+    getDocs,
+    query,
+    where,
+    orderBy,
+    documentId,
+    doc,
     onSnapshot,
     limit,
     startAfter,
@@ -28,195 +28,194 @@ const SUBMISSIONS_PAGE_SIZE = 5; // How many submissions to load at a time
 
 // --- HELPER COMPONENTS ---
 const StatCard = ({ icon: Icon, value, label, colorClass }: { icon: React.ElementType, value: string | number, label: string, colorClass: string }) => (
-    <div className="bg-white dark:bg-slate-900/70 p-4 rounded-xl flex items-center gap-4 border border-slate-200 dark:border-slate-800 shadow-sm">
-      <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${colorClass} bg-opacity-10 dark:bg-opacity-20`}>
-        <Icon className={`w-5 h-5 ${colorClass}`}/>
-      </div>
-      <div>
-        <p className={`text-xl font-bold text-slate-800 dark:text-white`}>{value}</p>
-        <p className="text-xs text-slate-500 dark:text-slate-400">{label}</p>
-      </div>
+    <div className="bg-white dark:bg-zinc-900/70 p-4 rounded-xl flex items-center gap-4 border border-zinc-200 dark:border-zinc-800 shadow-sm">
+        <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${colorClass} bg-opacity-10 dark:bg-opacity-20`}>
+            <Icon className={`w-5 h-5 ${colorClass}`} />
+        </div>
+        <div>
+            <p className={`text-xl font-bold text-zinc-800 dark:text-white`}>{value}</p>
+            <p className="text-xs text-zinc-500 dark:text-zinc-400">{label}</p>
+        </div>
     </div>
 );
 
 // --- ActivityCalendar ---
 // This component now receives the pre-calculated calendar data directly
 const ActivityCalendar = ({ calendarData, availableYears }: { calendarData: Record<string, number>; availableYears: number[] }) => {
-  const currentYear = new Date().getFullYear();
-  const [selectedYear, setSelectedYear] = useState<number>(currentYear);
+    const currentYear = new Date().getFullYear();
+    const [selectedYear, setSelectedYear] = useState<number>(currentYear);
 
-  const displayYears = useMemo(() => {
-    const yearsSet = new Set(availableYears);
-    yearsSet.add(currentYear);
-    // Ensure the last 5 years are available even if no data
-    const lastFiveYears = Array.from({ length: 5 }, (_, i) => currentYear - i);
-    lastFiveYears.forEach(year => yearsSet.add(year));
-    return Array.from(yearsSet).sort((a, b) => b - a);
-  }, [availableYears, currentYear]);
+    const displayYears = useMemo(() => {
+        const yearsSet = new Set(availableYears);
+        yearsSet.add(currentYear);
+        // Ensure the last 5 years are available even if no data
+        const lastFiveYears = Array.from({ length: 5 }, (_, i) => currentYear - i);
+        lastFiveYears.forEach(year => yearsSet.add(year));
+        return Array.from(yearsSet).sort((a, b) => b - a);
+    }, [availableYears, currentYear]);
 
-  useEffect(() => {
-      if (displayYears.length > 0 && !displayYears.includes(selectedYear)) {
-          setSelectedYear(displayYears[0] || currentYear);
-      }
-  }, [displayYears, selectedYear, currentYear]);
-
-
-  const { yearlySubmissions, calendarData: calendarGrid, monthLabels } = useMemo(() => {
-    let submissionCount = 0;
-    const submissionCounts: Record<string, number> = {};
-
-    // Filter the pre-calculated data for the selected year
-    for (const dateStr in calendarData) {
-        if (dateStr.startsWith(selectedYear.toString())) {
-            const count = calendarData[dateStr] || 0;
-            const dateObj = new Date(dateStr + 'T00:00:00'); // Assume local time
-            submissionCounts[dateObj.toDateString()] = count;
-            submissionCount += count;
+    useEffect(() => {
+        if (displayYears.length > 0 && !displayYears.includes(selectedYear)) {
+            setSelectedYear(displayYears[0] || currentYear);
         }
-    }
+    }, [displayYears, selectedYear, currentYear]);
 
-    const calendarGrid: ({ date: Date; count: number } | null)[][] = Array.from({ length: 53 }, () => Array(7).fill(null));
-    const firstDayOfYear = new Date(selectedYear, 0, 1);
-    const firstDayWeekday = firstDayOfYear.getDay(); 
 
-    let gridStartDate = new Date(firstDayOfYear);
-    gridStartDate.setDate(gridStartDate.getDate() - firstDayWeekday);
+    const { yearlySubmissions, calendarData: calendarGrid, monthLabels } = useMemo(() => {
+        let submissionCount = 0;
+        const submissionCounts: Record<string, number> = {};
 
-    let currentDate = new Date(gridStartDate);
-    let maxWeekIndex = 0; 
-
-    for (let weekIndex = 0; weekIndex < 53; weekIndex++) {
-        let weekHasDayInYear = false;
-        for (let dayIndex = 0; dayIndex < 7; dayIndex++) {
-            if (currentDate.getFullYear() === selectedYear) {
-                const dateStr = currentDate.toDateString();
-                calendarGrid[weekIndex][dayIndex] = {
-                    date: new Date(currentDate),
-                    count: submissionCounts[dateStr] || 0,
-                };
-                weekHasDayInYear = true;
-            } else {
-                calendarGrid[weekIndex][dayIndex] = null;
+        // Filter the pre-calculated data for the selected year
+        for (const dateStr in calendarData) {
+            if (dateStr.startsWith(selectedYear.toString())) {
+                const count = calendarData[dateStr] || 0;
+                const dateObj = new Date(dateStr + 'T00:00:00'); // Assume local time
+                submissionCounts[dateObj.toDateString()] = count;
+                submissionCount += count;
             }
-            currentDate.setDate(currentDate.getDate() + 1);
         }
-        if (weekHasDayInYear) {
-            maxWeekIndex = weekIndex;
-        }
-        if (currentDate.getFullYear() > selectedYear && currentDate.getDay() === 0) {
-            break;
-        }
-    }
 
-    const trimmedCalendarGrid = calendarGrid.slice(0, maxWeekIndex + 1);
-    const monthLabels: { name: string; weekIndex: number }[] = [];
-    const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-    let lastMonth = -1;
+        const calendarGrid: ({ date: Date; count: number } | null)[][] = Array.from({ length: 53 }, () => Array(7).fill(null));
+        const firstDayOfYear = new Date(selectedYear, 0, 1);
+        const firstDayWeekday = firstDayOfYear.getDay();
 
-    trimmedCalendarGrid.forEach((week, weekIndex) => {
-        const firstDayOfYearInWeek = week.find(day => day?.date.getFullYear() === selectedYear);
-        if (firstDayOfYearInWeek) {
-            const month = firstDayOfYearInWeek.date.getMonth();
-            if (month !== lastMonth) {
-                if (monthLabels.length === 0 || weekIndex > monthLabels[monthLabels.length - 1].weekIndex + 2) {
-                    monthLabels.push({ name: monthNames[month], weekIndex });
-                    lastMonth = month;
-                } else if (monthLabels.length > 0 && monthLabels[monthLabels.length - 1].name !== monthNames[month]) {
-                    const lastLabelWeek = monthLabels[monthLabels.length - 1].weekIndex;
-                    if (weekIndex > lastLabelWeek) { 
+        let gridStartDate = new Date(firstDayOfYear);
+        gridStartDate.setDate(gridStartDate.getDate() - firstDayWeekday);
+
+        let currentDate = new Date(gridStartDate);
+        let maxWeekIndex = 0;
+
+        for (let weekIndex = 0; weekIndex < 53; weekIndex++) {
+            let weekHasDayInYear = false;
+            for (let dayIndex = 0; dayIndex < 7; dayIndex++) {
+                if (currentDate.getFullYear() === selectedYear) {
+                    const dateStr = currentDate.toDateString();
+                    calendarGrid[weekIndex][dayIndex] = {
+                        date: new Date(currentDate),
+                        count: submissionCounts[dateStr] || 0,
+                    };
+                    weekHasDayInYear = true;
+                } else {
+                    calendarGrid[weekIndex][dayIndex] = null;
+                }
+                currentDate.setDate(currentDate.getDate() + 1);
+            }
+            if (weekHasDayInYear) {
+                maxWeekIndex = weekIndex;
+            }
+            if (currentDate.getFullYear() > selectedYear && currentDate.getDay() === 0) {
+                break;
+            }
+        }
+
+        const trimmedCalendarGrid = calendarGrid.slice(0, maxWeekIndex + 1);
+        const monthLabels: { name: string; weekIndex: number }[] = [];
+        const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+        let lastMonth = -1;
+
+        trimmedCalendarGrid.forEach((week, weekIndex) => {
+            const firstDayOfYearInWeek = week.find(day => day?.date.getFullYear() === selectedYear);
+            if (firstDayOfYearInWeek) {
+                const month = firstDayOfYearInWeek.date.getMonth();
+                if (month !== lastMonth) {
+                    if (monthLabels.length === 0 || weekIndex > monthLabels[monthLabels.length - 1].weekIndex + 2) {
                         monthLabels.push({ name: monthNames[month], weekIndex });
                         lastMonth = month;
+                    } else if (monthLabels.length > 0 && monthLabels[monthLabels.length - 1].name !== monthNames[month]) {
+                        const lastLabelWeek = monthLabels[monthLabels.length - 1].weekIndex;
+                        if (weekIndex > lastLabelWeek) {
+                            monthLabels.push({ name: monthNames[month], weekIndex });
+                            lastMonth = month;
+                        }
                     }
                 }
             }
-        }
-    });
+        });
 
-    return { yearlySubmissions: submissionCount, calendarData: trimmedCalendarGrid, monthLabels };
-  }, [selectedYear, calendarData]);
+        return { yearlySubmissions: submissionCount, calendarData: trimmedCalendarGrid, monthLabels };
+    }, [selectedYear, calendarData]);
 
-  const getIntensity = (count: number) => {
-    if (count === 0) return 'bg-slate-200 dark:bg-slate-800 opacity-50 dark:opacity-40';
-    if (count <= 2) return 'bg-emerald-200 dark:bg-emerald-900';
-    if (count <= 5) return 'bg-emerald-400 dark:bg-emerald-700';
-    return 'bg-emerald-600 dark:bg-emerald-500';
-  };
+    const getIntensity = (count: number) => {
+        if (count === 0) return 'bg-zinc-200 dark:bg-zinc-800 opacity-50 dark:opacity-40';
+        if (count <= 2) return 'bg-emerald-200 dark:bg-emerald-900';
+        if (count <= 5) return 'bg-emerald-400 dark:bg-emerald-700';
+        return 'bg-emerald-600 dark:bg-emerald-500';
+    };
 
-  const weekDayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-  const weekColumnWidth = 14; 
+    const weekDayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const weekColumnWidth = 14;
 
-  return (
-    <div>
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-3 gap-2">
-            <h3 className="text-lg font-semibold text-slate-800 dark:text-white order-1 sm:order-none">
-                {yearlySubmissions} {yearlySubmissions === 1 ? 'submission' : 'submissions'} in {selectedYear}
-            </h3>
-            <div className="flex gap-1 overflow-x-auto pb-1 sm:pb-0 order-first sm:order-none">
-                {displayYears.map(year => (
-                    <button
-                        key={year}
-                        onClick={() => setSelectedYear(year)}
-                        className={`px-3 py-1 rounded-md text-xs font-medium whitespace-nowrap transition-colors ${
-                            selectedYear === year
-                                ? 'bg-blue-600 text-white shadow-sm'
-                                : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
-                        }`}
-                    >
-                        {year}
-                    </button>
-                ))}
-            </div>
-        </div>
-
-        <div className="bg-white dark:bg-slate-900/70 p-4 rounded-lg overflow-x-auto border border-slate-200 dark:border-slate-800">
-            <div className="flex gap-3">
-                <div className="flex flex-col justify-between pt-5 pr-1 text-xs text-slate-400 dark:text-slate-500 shrink-0" style={{ height: `${7 * 10 + 6 * 4}px` }}>
-                    {weekDayLabels.map((day, index) => (
-                        <div key={index} className="h-2.5 flex items-center">
-                            {(index === 1 || index === 3 || index === 5) ? day.substring(0, 3) : ''}
-                        </div>
+    return (
+        <div>
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-3 gap-2">
+                <h3 className="text-lg font-semibold text-zinc-800 dark:text-white order-1 sm:order-none">
+                    {yearlySubmissions} {yearlySubmissions === 1 ? 'submission' : 'submissions'} in {selectedYear}
+                </h3>
+                <div className="flex gap-1 overflow-x-auto pb-1 sm:pb-0 order-first sm:order-none">
+                    {displayYears.map(year => (
+                        <button
+                            key={year}
+                            onClick={() => setSelectedYear(year)}
+                            className={`px-3 py-1 rounded-md text-xs font-medium whitespace-nowrap transition-colors ${selectedYear === year
+                                    ? 'bg-blue-600 text-white shadow-sm'
+                                    : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700'
+                                }`}
+                        >
+                            {year}
+                        </button>
                     ))}
                 </div>
+            </div>
 
-                <div className="flex flex-col">
-                    <div className="relative mb-1" style={{ height: '1em', width: `${calendarGrid.length * weekColumnWidth}px` }}>
-                        {monthLabels.map(({ name, weekIndex }) => (
-                            <span
-                                key={name}
-                                className="absolute top-0 text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap"
-                                style={{ left: `${weekIndex * weekColumnWidth}px` }}
-                            >
-                                {name}
-                            </span>
-                        ))}
-                    </div>
-
-                    <div className="grid grid-flow-col auto-cols-max gap-1">
-                        {calendarGrid.map((week: ({ date: Date; count: number } | null)[], weekIndex: number) => (
-                            <div key={weekIndex} className="grid grid-rows-7 gap-1">
-                                {week.map((day: { date: Date; count: number } | null, dayIndex: number) => (
-                                    <div
-                                        key={day ? day.date.toISOString() : `empty-${weekIndex}-${dayIndex}`}
-                                        className={`w-2.5 h-2.5 rounded-sm ${day ? getIntensity(day.count) : 'bg-slate-100 dark:bg-slate-800 opacity-40'}`}
-                                        title={day ? `${day.count} submission(s) on ${day.date.toLocaleDateString()}` : undefined}
-                                    />
-                                ))}
+            <div className="bg-white dark:bg-zinc-900/70 p-4 rounded-lg overflow-x-auto border border-zinc-200 dark:border-zinc-800">
+                <div className="flex gap-3">
+                    <div className="flex flex-col justify-between pt-5 pr-1 text-xs text-zinc-400 dark:text-zinc-500 shrink-0" style={{ height: `${7 * 10 + 6 * 4}px` }}>
+                        {weekDayLabels.map((day, index) => (
+                            <div key={index} className="h-2.5 flex items-center">
+                                {(index === 1 || index === 3 || index === 5) ? day.substring(0, 3) : ''}
                             </div>
                         ))}
                     </div>
+
+                    <div className="flex flex-col">
+                        <div className="relative mb-1" style={{ height: '1em', width: `${calendarGrid.length * weekColumnWidth}px` }}>
+                            {monthLabels.map(({ name, weekIndex }) => (
+                                <span
+                                    key={name}
+                                    className="absolute top-0 text-xs text-zinc-500 dark:text-zinc-400 whitespace-nowrap"
+                                    style={{ left: `${weekIndex * weekColumnWidth}px` }}
+                                >
+                                    {name}
+                                </span>
+                            ))}
+                        </div>
+
+                        <div className="grid grid-flow-col auto-cols-max gap-1">
+                            {calendarGrid.map((week: ({ date: Date; count: number } | null)[], weekIndex: number) => (
+                                <div key={weekIndex} className="grid grid-rows-7 gap-1">
+                                    {week.map((day: { date: Date; count: number } | null, dayIndex: number) => (
+                                        <div
+                                            key={day ? day.date.toISOString() : `empty-${weekIndex}-${dayIndex}`}
+                                            className={`w-2.5 h-2.5 rounded-sm ${day ? getIntensity(day.count) : 'bg-zinc-100 dark:bg-zinc-800 opacity-40'}`}
+                                            title={day ? `${day.count} submission(s) on ${day.date.toLocaleDateString()}` : undefined}
+                                        />
+                                    ))}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+                <div className="flex justify-end items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400 mt-2 pr-2">
+                    <span>Less</span>
+                    <div className={`w-2.5 h-2.5 rounded-sm ${getIntensity(0)}`}></div>
+                    <div className={`w-2.5 h-2.5 rounded-sm ${getIntensity(1)}`}></div>
+                    <div className={`w-2.5 h-2.5 rounded-sm ${getIntensity(3)}`}></div>
+                    <div className={`w-2.5 h-2.5 rounded-sm ${getIntensity(6)}`}></div>
+                    <span>More</span>
                 </div>
             </div>
-            <div className="flex justify-end items-center gap-2 text-xs text-slate-500 dark:text-slate-400 mt-2 pr-2">
-                <span>Less</span>
-                <div className={`w-2.5 h-2.5 rounded-sm ${getIntensity(0)}`}></div>
-                <div className={`w-2.5 h-2.5 rounded-sm ${getIntensity(1)}`}></div>
-                <div className={`w-2.5 h-2.5 rounded-sm ${getIntensity(3)}`}></div>
-                <div className={`w-2.5 h-2.5 rounded-sm ${getIntensity(6)}`}></div>
-                <span>More</span>
-            </div>
         </div>
-    </div>
-  );
+    );
 };
 
 
@@ -237,7 +236,7 @@ export function Profile() {
     const [loadingSubmissions, setLoadingSubmissions] = useState(true);
     const [submissionsLastDoc, setSubmissionsLastDoc] = useState<DocumentSnapshot<DocumentData> | null>(null);
     const [hasMoreSubmissions, setHasMoreSubmissions] = useState(false);
-    
+
     const isOwnProfile = authUser && profileUser && authUser.uid === profileUser.uid;
 
     // --- Paginated function to fetch submissions (NOW BRANCH-AWARE) ---
@@ -249,9 +248,9 @@ export function Profile() {
         try {
             // --- UPDATED: Filter submissions by branch ---
             let submissionsQuery = query(
-                collection(db, `users/${profileUid}/submissions`), 
+                collection(db, `users/${profileUid}/submissions`),
                 where('branch', '==', branch), // <-- ADDED BRANCH FILTER
-                orderBy('timestamp', 'desc'), 
+                orderBy('timestamp', 'desc'),
                 limit(SUBMISSIONS_PAGE_SIZE)
             );
 
@@ -261,7 +260,7 @@ export function Profile() {
 
             const submissionsSnapshot = await getDocs(submissionsQuery);
             const submissionsData = submissionsSnapshot.docs.map(doc => doc.data() as Submission);
-            
+
             const lastDoc = submissionsSnapshot.docs[submissionsSnapshot.docs.length - 1];
             setSubmissionsLastDoc(lastDoc || null);
             setHasMoreSubmissions(submissionsData.length === SUBMISSIONS_PAGE_SIZE);
@@ -276,7 +275,7 @@ export function Profile() {
                 for (let i = 0; i < questionIds.length; i += 30) {
                     chunks.push(questionIds.slice(i, i + 30));
                 }
-                
+
                 for (const chunk of chunks) {
                     if (chunk.length === 0) continue;
                     const qQuery = query(collection(db, collectionPath), where(documentId(), 'in', chunk));
@@ -291,7 +290,7 @@ export function Profile() {
                 ...submission,
                 question: fetchedQuestions.get(submission.qid)
             }));
-            
+
             setRecentSubmissions(prev => isFirstPage ? submissionsWithData : [...prev, ...submissionsWithData]);
 
         } catch (error) {
@@ -305,11 +304,11 @@ export function Profile() {
     // --- Real-time listener for the profile user's document ---
     useEffect(() => {
         if (!username || !questionCollectionPath || !selectedBranch) {
-            setLoadingUser(true); 
+            setLoadingUser(true);
             setUserFound(false);
             return;
         };
-        
+
         console.log(`[Profile] Params ready. Username: ${username}, Branch: ${selectedBranch}`);
         setLoadingUser(true);
         setUserFound(true);
@@ -320,8 +319,8 @@ export function Profile() {
 
         const usersRef = collection(db, 'users');
         const userQuery = query(usersRef, where("username", "==", username), limit(1));
-        
-        let unsubscribe: () => void = () => {};
+
+        let unsubscribe: () => void = () => { };
 
         getDocs(userQuery).then(userSnapshot => {
             if (userSnapshot.empty) {
@@ -329,18 +328,18 @@ export function Profile() {
                 setLoadingUser(false);
                 return;
             }
-            
+
             const userDoc = userSnapshot.docs[0];
             const profileUid = userDoc.id;
 
             // --- Now, create a real-time listener for this user ---
             console.log(`[Profile] Subscribing to user document: ${profileUid}`);
             const userDocRef = doc(db, 'users', profileUid);
-            
+
             unsubscribe = onSnapshot(userDocRef, (doc) => {
                 if (doc.exists()) {
                     const userData = doc.data() as User;
-                    
+
                     // --- NEW: Initialize branch-specific fields if they don't exist ---
                     if (!userData.branchStats) { userData.branchStats = {}; }
                     if (!userData.ratings) { userData.ratings = {}; }
@@ -374,28 +373,28 @@ export function Profile() {
             console.log("[Profile] Unsubscribing from user document.");
             unsubscribe();
         };
-    // --- UPDATED: Re-run if username or selectedBranch changes ---
-    // --- FIXED: Removed fetchSubmissions from dependency array to prevent infinite loop ---
+        // --- UPDATED: Re-run if username or selectedBranch changes ---
+        // --- FIXED: Removed fetchSubmissions from dependency array to prevent infinite loop ---
     }, [username, selectedBranch, questionCollectionPath]);
 
 
     // --- Memoized values derived from the (real-time) profileUser AND branch ---
-    const { 
-        branchRating, 
+    const {
+        branchRating,
         branchStats,
         branchStreak,
         branchCalendar,
-        allAvailableYears, 
-        subjectStats 
+        allAvailableYears,
+        subjectStats
     } = useMemo(() => {
         if (!profileUser || !metadata) {
-            return { 
-                branchRating: 0, 
+            return {
+                branchRating: 0,
                 branchStats: { attempted: 0, correct: 0, accuracy: 0, subjects: {} },
                 branchStreak: { currentStreak: 0, lastSubmissionDate: '' },
                 branchCalendar: {},
-                allAvailableYears: [], 
-                subjectStats: [] 
+                allAvailableYears: [],
+                subjectStats: []
             };
         }
 
@@ -410,12 +409,12 @@ export function Profile() {
         if (profileUser.branchActivityCalendar) {
             // Check all calendars for all branches
             Object.values(profileUser.branchActivityCalendar).forEach(branchCalendar => {
-                 Object.keys(branchCalendar).forEach(dateStr => {
+                Object.keys(branchCalendar).forEach(dateStr => {
                     years.add(parseInt(dateStr.substring(0, 4), 10));
-                 });
+                });
             });
         }
-        
+
         // 3. Calculate Subject Stats for the *selected* branch
         const solvedCounts = stats.subjects || {};
         const subjectStats = Object.entries(metadata.subjectCounts || {}).map(([subjectName, total]) => ({
@@ -429,7 +428,7 @@ export function Profile() {
             branchStats: stats,
             branchStreak: streak,
             branchCalendar: calendar,
-            allAvailableYears: Array.from(years).sort((a,b) => b-a),
+            allAvailableYears: Array.from(years).sort((a, b) => b - a),
             subjectStats: subjectStats
         };
     }, [profileUser, metadata, selectedBranch]);
@@ -442,7 +441,7 @@ export function Profile() {
     if (!userFound || !profileUser) {
         return <UserNotFound />;
     }
-    
+
     const branchName = availableBranches[selectedBranch] || 'Stats';
 
     // --- Render ---
@@ -454,49 +453,49 @@ export function Profile() {
                     {/* Left Column */}
                     <div className="lg:col-span-1 space-y-6">
                         {/* User Info Card */}
-                        <div className="bg-white dark:bg-slate-900/70 p-6 relative rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+                        <div className="bg-white dark:bg-zinc-900/70 p-6 relative rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-sm">
                             <div className="flex flex-col items-center text-center">
                                 <div className="relative">
-                                    <img src={profileUser.avatar || '/user.png'} alt={profileUser.name || 'User Avatar'} className="w-28 h-28 rounded-full shadow-lg border-4 border-white dark:border-slate-700 object-cover" onError={(e) => { e.currentTarget.src = '/user.png'; }} />
+                                    <img src={profileUser.avatar || '/user.png'} alt={profileUser.name || 'User Avatar'} className="w-28 h-28 rounded-full shadow-lg border-4 border-white dark:border-zinc-700 object-cover" onError={(e) => { e.currentTarget.src = '/user.png'; }} />
                                     {/* --- UPDATED: Show branch-specific rating --- */}
                                     <span className="absolute bottom-0 right-0 bg-gradient-to-tr from-blue-500 to-indigo-600 text-white rounded-full px-2 py-1 text-xs font-bold shadow-md flex items-center gap-1">
-                                        <BarChart className="w-3 h-3"/> {branchRating}
+                                        <BarChart className="w-3 h-3" /> {branchRating}
                                     </span>
                                 </div>
-                                <h1 className="text-2xl font-bold text-slate-800 dark:text-white mt-4">{profileUser.name || 'User'}</h1>
-                                <p className="text-slate-500 dark:text-slate-400">@{profileUser.username || 'username'}</p>
-                                <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400 mt-2 text-sm">
+                                <h1 className="text-2xl font-bold text-zinc-800 dark:text-white mt-4">{profileUser.name || 'User'}</h1>
+                                <p className="text-zinc-500 dark:text-zinc-400">@{profileUser.username || 'username'}</p>
+                                <div className="flex items-center gap-2 text-zinc-500 dark:text-zinc-400 mt-2 text-sm">
                                     <Calendar className="w-4 h-4" />
                                     <span>Joined {profileUser.joined ? new Date(profileUser.joined).toLocaleDateString(undefined, { year: 'numeric', month: 'long' }) : 'N/A'}</span>
                                 </div>
                             </div>
-                            {isOwnProfile && (<Link to="/settings" className="absolute top-4 right-4 p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800/50 transition-colors" title="Settings"><SettingsIcon className="w-5 h-5 text-slate-500 dark:text-slate-400" /></Link> )}
+                            {isOwnProfile && (<Link to="/settings" className="absolute top-4 right-4 p-2 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800/50 transition-colors" title="Settings"><SettingsIcon className="w-5 h-5 text-zinc-500 dark:text-zinc-400" /></Link>)}
                         </div>
 
                         {/* Subject Mastery Card */}
-                        <div className="bg-white dark:bg-slate-900/70 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+                        <div className="bg-white dark:bg-zinc-900/70 rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-sm">
                             {/* --- UPDATED: Title includes branch name --- */}
-                            <h2 className="text-lg font-semibold p-6 border-b border-slate-200 dark:border-slate-800 text-slate-800 dark:text-white">Subject Mastery ({branchName})</h2>
+                            <h2 className="text-lg font-semibold p-6 border-b border-zinc-200 dark:border-zinc-800 text-zinc-800 dark:text-white">Subject Mastery ({branchName})</h2>
                             <div className="p-6 space-y-4 max-h-80 overflow-y-auto">
                                 {subjectStats.length > 0 ? (
-                                    subjectStats.sort((a,b) => b.total - a.total)
+                                    subjectStats.sort((a, b) => b.total - a.total)
                                         .filter(data => data.total > 0) // Only show subjects with questions
-                                        .map((data) => { 
-                                            const percentage = data.total > 0 ? (data.solved / data.total) * 100 : 0; 
-                                            return ( 
-                                                <div key={data.name}> 
-                                                    <div className="flex justify-between text-sm mb-1"> 
-                                                        <span className="font-medium text-slate-700 dark:text-slate-200">{data.name}</span> 
-                                                        <span className="text-slate-500 dark:text-slate-400">{data.solved} / {data.total}</span> 
-                                                    </div> 
-                                                    <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2 overflow-hidden"> 
-                                                        <div className="bg-blue-500 h-2 rounded-full transition-all duration-500 ease-out" style={{width: `${percentage}%`}}></div> 
-                                                    </div> 
-                                                </div> 
-                                            ) 
+                                        .map((data) => {
+                                            const percentage = data.total > 0 ? (data.solved / data.total) * 100 : 0;
+                                            return (
+                                                <div key={data.name}>
+                                                    <div className="flex justify-between text-sm mb-1">
+                                                        <span className="font-medium text-zinc-700 dark:text-zinc-200">{data.name}</span>
+                                                        <span className="text-zinc-500 dark:text-zinc-400">{data.solved} / {data.total}</span>
+                                                    </div>
+                                                    <div className="w-full bg-zinc-200 dark:bg-zinc-700 rounded-full h-2 overflow-hidden">
+                                                        <div className="bg-blue-500 h-2 rounded-full transition-all duration-500 ease-out" style={{ width: `${percentage}%` }}></div>
+                                                    </div>
+                                                </div>
+                                            )
                                         })
                                 ) : (
-                                    <p className="text-slate-500 dark:text-slate-400 text-sm">Loading subject data...</p>
+                                    <p className="text-zinc-500 dark:text-zinc-400 text-sm">Loading subject data...</p>
                                 )}
                             </div>
                         </div>
@@ -505,13 +504,13 @@ export function Profile() {
                     {/* Right Column */}
                     <div className="lg:col-span-2 space-y-6">
                         {/* Activity Calendar Card */}
-                        <div className="bg-white dark:bg-slate-900/70 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
-                             {/* --- UPDATED: Title includes branch name --- */}
-                            <h2 className="text-lg font-semibold pb-2 text-slate-800 dark:text-white">Activity ({branchName})</h2>
-                            <ActivityCalendar 
+                        <div className="bg-white dark:bg-zinc-900/70 p-6 rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-sm">
+                            {/* --- UPDATED: Title includes branch name --- */}
+                            <h2 className="text-lg font-semibold pb-2 text-zinc-800 dark:text-white">Activity ({branchName})</h2>
+                            <ActivityCalendar
                                 // --- UPDATED: Pass branch-specific calendar and all years ---
-                                calendarData={branchCalendar} 
-                                availableYears={allAvailableYears} 
+                                calendarData={branchCalendar}
+                                availableYears={allAvailableYears}
                             />
                         </div>
 
@@ -525,40 +524,40 @@ export function Profile() {
                         </div>
 
                         {/* Recent Submissions Card */}
-                        <div className="bg-white dark:bg-slate-900/70 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
-                             {/* --- UPDATED: Title includes branch name --- */}
-                            <h2 className="text-lg font-semibold p-6 border-b border-slate-200 dark:border-slate-800 text-slate-800 dark:text-white">Recent Submissions ({branchName})</h2>
-                            <div className="divide-y divide-slate-200 dark:divide-slate-800">
-                                {recentSubmissions.length > 0 ? ( 
-                                    recentSubmissions.map((activity) => ( 
-                                        <div key={activity.timestamp + activity.qid} className="p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors gap-2"> 
-                                            <div> 
-                                                <Link to={`/question/${activity.qid}`} className="font-semibold text-blue-500 dark:text-blue-400 hover:underline"> 
-                                                    {activity.question?.title || `Question ${activity.qid.substring(0,6)}...`} 
-                                                </Link> 
-                                                <p className="text-sm text-slate-500 dark:text-slate-400"> 
-                                                    {activity.timestamp ? new Date(activity.timestamp).toLocaleString() : 'N/A'} 
-                                                </p> 
-                                            </div> 
-                                            <span className={`text-sm font-bold px-3 py-1 rounded-full whitespace-nowrap ${activity.correct ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-400' : 'bg-red-100 text-red-800 dark:bg-red-500/10 dark:text-red-400'}`}> 
-                                                {activity.correct ? 'Accepted' : 'Wrong Answer'} 
-                                            </span> 
-                                        </div> 
-                                    )) 
-                                ) : ( 
-                                    !loadingSubmissions && <p className="p-6 text-slate-500 dark:text-slate-400">No recent submissions found for this branch.</p> 
+                        <div className="bg-white dark:bg-zinc-900/70 rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-sm">
+                            {/* --- UPDATED: Title includes branch name --- */}
+                            <h2 className="text-lg font-semibold p-6 border-b border-zinc-200 dark:border-zinc-800 text-zinc-800 dark:text-white">Recent Submissions ({branchName})</h2>
+                            <div className="divide-y divide-zinc-200 dark:divide-zinc-800">
+                                {recentSubmissions.length > 0 ? (
+                                    recentSubmissions.map((activity) => (
+                                        <div key={activity.timestamp + activity.qid} className="p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors gap-2">
+                                            <div>
+                                                <Link to={`/question/${activity.qid}`} className="font-semibold text-blue-500 dark:text-blue-400 hover:underline">
+                                                    {activity.question?.title || `Question ${activity.qid.substring(0, 6)}...`}
+                                                </Link>
+                                                <p className="text-sm text-zinc-500 dark:text-zinc-400">
+                                                    {activity.timestamp ? new Date(activity.timestamp).toLocaleString() : 'N/A'}
+                                                </p>
+                                            </div>
+                                            <span className={`text-sm font-bold px-3 py-1 rounded-full whitespace-nowrap ${activity.correct ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-400' : 'bg-red-100 text-red-800 dark:bg-red-500/10 dark:text-red-400'}`}>
+                                                {activity.correct ? 'Accepted' : 'Wrong Answer'}
+                                            </span>
+                                        </div>
+                                    ))
+                                ) : (
+                                    !loadingSubmissions && <p className="p-6 text-zinc-500 dark:text-zinc-400">No recent submissions found for this branch.</p>
                                 )}
-                                
+
                                 {loadingSubmissions && (
                                     <div className="p-4 text-center">
-                                        <Loader2 className="w-5 h-5 animate-spin text-slate-400 mx-auto" />
+                                        <Loader2 className="w-5 h-5 animate-spin text-zinc-400 mx-auto" />
                                     </div>
                                 )}
 
                                 {hasMoreSubmissions && !loadingSubmissions && (
-                                    <button 
+                                    <button
                                         onClick={() => fetchSubmissions(profileUser.uid, questionCollectionPath, selectedBranch, false)}
-                                        className="w-full p-4 text-sm font-medium text-blue-600 dark:text-blue-400 hover:bg-slate-50 dark:hover:bg-slate-800/50"
+                                        className="w-full p-4 text-sm font-medium text-blue-600 dark:text-blue-400 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
                                     >
                                         Load More
                                     </button>

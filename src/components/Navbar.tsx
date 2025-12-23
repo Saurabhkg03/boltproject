@@ -1,272 +1,219 @@
+import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Moon, Sun, LogOut, User, Shield, Settings, ChevronDown, Flame, BookCopy } from 'lucide-react';
-// --- FIX: Removing .tsx extensions from all context imports ---
+import { motion } from 'framer-motion';
+
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useDailyChallenge } from '../contexts/DailyChallengeContext';
 import { useMetadata } from '../contexts/MetadataContext';
-import { useState, useRef, useEffect } from 'react';
-import React from 'react';
+import { cn } from '@/lib/utils'; // Updated import
+import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
-// --- Branch Selector Component (Unchanged) ---
+// --- Branch Selector Component ---
 const BranchSelector = () => {
   const { selectedBranch, setSelectedBranch, availableBranches, loading } = useMetadata();
-  const [isOpen, setIsOpen] = useState(false);
-  const selectorRef = useRef<HTMLDivElement>(null);
-
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (selectorRef.current && !selectorRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
-  }, [selectorRef]);
 
   if (loading) {
-     return (
-        <div className="flex items-center gap-2 px-3 py-2 rounded-full bg-slate-200/50 dark:bg-slate-800/50 animate-pulse">
-            <BookCopy className="w-4 h-4 text-slate-400" />
-            <div className="h-4 w-12 rounded bg-slate-400/50"></div>
-            <ChevronDown className="w-5 h-5 text-slate-400" />
-        </div>
-     );
+    return (
+      <div className="flex items-center gap-2 px-3 py-2 rounded-full bg-zinc-200/50 dark:bg-zinc-800/50 animate-pulse">
+        <BookCopy className="w-4 h-4 text-zinc-400" />
+        <div className="h-4 w-12 rounded bg-zinc-400/50"></div>
+        <ChevronDown className="w-5 h-5 text-zinc-400" />
+      </div>
+    );
   }
-  
+
   return (
-    <div className="relative" ref={selectorRef}>
-        <button 
-            onClick={() => setIsOpen(!isOpen)} 
-            // --- FIX: De-congest: smaller padding, smaller chevron ---
-            className="flex items-center gap-2 px-2 py-1.5 rounded-full hover:bg-slate-200/50 dark:hover:bg-slate-800/50 transition-colors group"
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="rounded-full h-8 gap-2 px-3 font-normal text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200/50 dark:hover:bg-zinc-800/50"
         >
-            <BookCopy className="w-4 h-4 text-blue-500" />
-            <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                {availableBranches[selectedBranch] || 'Select'}
-            </span>
-            <ChevronDown className={`w-4 h-4 text-slate-500 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
-        </button>
-        {isOpen && (
-            <div className="absolute left-0 sm:right-0 sm:left-auto mt-2 w-36 bg-white dark:bg-slate-900 rounded-xl shadow-lg py-2 border border-slate-200 dark:border-slate-700 z-50">
-                {Object.entries(availableBranches).map(([key, name]) => (
-                    <button
-                        key={key}
-                        onClick={() => {
-                            setSelectedBranch(key);
-                            setIsOpen(false);
-                        }}
-                        className={`w-full text-left flex items-center gap-3 px-4 py-2 text-sm ${
-                            selectedBranch === key 
-                            ? 'font-semibold text-blue-600 dark:text-blue-300' 
-                            : 'text-slate-700 dark:text-slate-200'
-                        } hover:bg-blue-500/10 hover:text-blue-600 dark:hover:text-blue-300`}
-                    >
-                        {name}
-                    </button>
-                ))}
-            </div>
-        )}
-    </div>
+          <BookCopy className="w-4 h-4 text-blue-500" />
+          <span className="text-sm font-medium">
+            {availableBranches[selectedBranch] || 'Select'}
+          </span>
+          <ChevronDown className="w-4 h-4 text-zinc-500 alpha-50" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-48">
+        <DropdownMenuLabel>Select Branch</DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        {Object.entries(availableBranches).map(([key, name]) => (
+          <DropdownMenuItem
+            key={key}
+            onClick={() => setSelectedBranch(key)}
+            className={cn(
+              "cursor-pointer",
+              selectedBranch === key && "bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400"
+            )}
+          >
+            {name}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 };
 
+// --- Nav Link Component with Framer Motion ---
+const NavLinkItem = ({ to, label, icon }: { to: string, label: string, icon?: React.ReactNode }) => {
+  const location = useLocation();
+  const isActive = location.pathname === to;
+
+  return (
+    <Link
+      to={to}
+      className={cn(
+        "relative flex items-center gap-2 px-3 py-1.5 text-sm font-medium transition-colors rounded-full z-10",
+        isActive ? "text-blue-600 dark:text-blue-300" : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100"
+      )}
+    >
+      {isActive && (
+        <motion.span
+          layoutId="nav-pill"
+          className="absolute inset-0 bg-blue-100 dark:bg-blue-900/40 rounded-full -z-10"
+          transition={{ type: "spring", stiffness: 300, damping: 30 }}
+        />
+      )}
+      {icon}
+      {label}
+    </Link>
+  );
+};
 
 export function Navbar() {
   const { theme, toggleTheme } = useTheme();
   const { userInfo, logout, isAuthenticated } = useAuth();
-  // --- UPDATED: Get branch context to find the correct streak ---
   const { selectedBranch } = useMetadata();
   const streak = (userInfo?.branchStreakData?.[selectedBranch] || userInfo?.streakData)?.currentStreak || 0;
-
-  const [dropdownOpen, setDropdownOpen] = useState(false);
   const { dailyChallengeId, loadingChallenge } = useDailyChallenge();
-  const dropdownRef = useRef<HTMLDivElement>(null);
-
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      // --- FIX: Changed 'selectorRef' to 'dropdownRef' ---
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setDropdownOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
-  }, [dropdownRef]);
-
-  // Close profile dropdown when location changes
-  const location = useLocation();
-  useEffect(() => {
-    setDropdownOpen(false);
-  }, [location]);
-
 
   return (
-    <nav className="sticky top-0 z-50 bg-white/60 dark:bg-slate-900/60 backdrop-blur-lg border-b border-white/30 dark:border-slate-800/60">
+    <nav className="sticky top-0 z-50 bg-white/95 dark:bg-zinc-950/95 backdrop-blur-xl border-b border-zinc-200 dark:border-zinc-800 supports-[backdrop-filter]:bg-white/60">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* --- FIX: De-congest: smaller gap --- */}
-        <div className="flex justify-between items-center h-16 gap-1.5">
-          {/* --- FIX: De-congest: smaller logo and text --- */}
-          <Link to="/" className="flex items-center gap-1.5 font-bold text-slate-800 dark:text-white">
-            <img 
-              src="/logo.png"
-              alt="GATECode Logo" 
-              className="w-8 h-8" // --- FIX: De-congest: smaller logo ---
-            />
-            <span className="text-lg">GATECode</span> {/* --- FIX: De-congest: smaller text --- */}
+        <div className="flex justify-between items-center h-16 gap-2">
+          {/* Logo */}
+          <Link to="/" className="flex items-center gap-2 font-bold text-zinc-900 dark:text-white shrink-0">
+            <img src="/logo.png" alt="GATECode Logo" className="w-8 h-8 rounded-lg" />
+            <span className="text-xl tracking-tight hidden sm:inline-block">GATECode</span>
+            <span className="text-xl tracking-tight sm:hidden">GC</span>
           </Link>
 
-          {/* --- UPDATED: Links now hidden on mobile (md:flex) --- */}
-          <div className="hidden md:flex items-center gap-2">
+          {/* Desktop Navigation */}
+          <div className="hidden md:flex items-center gap-1 bg-zinc-100/50 dark:bg-zinc-900/50 p-1 rounded-full border border-zinc-200/50 dark:border-zinc-800/50">
             <NavLinkItem to="/" label="Home" />
             <NavLinkItem to="/practice" label="Practice" />
             <NavLinkItem to="/leaderboard" label="Leaderboard" />
             {(userInfo?.role === 'admin' || userInfo?.role === 'moderator') && (
-                 <NavLinkItem to="/admin" label="Admin Panel" icon={<Shield className="w-4 h-4" />} />
+              <NavLinkItem to="/admin" label="Admin" icon={<Shield className="w-3.5 h-3.5" />} />
             )}
           </div>
 
-          {/* Right side icons/buttons */}
-          {/* --- FIX: De-congest: smaller gap --- */}
-          <div className="flex items-center gap-1.5">
-            
-            {/* --- NEW: BRANCH SELECTOR --- */}
+          {/* Right Side Actions */}
+          <div className="flex items-center gap-2 md:gap-3">
             <BranchSelector />
-            
-           {isAuthenticated && streak > 0 && (
-             <Link
-               to={!loadingChallenge && dailyChallengeId ? `/question/${dailyChallengeId}` : '/practice'}
-               // --- FIX: De-congest: smaller padding, smaller icon ---
-               className={`flex items-center gap-1.5 text-orange-500 dark:text-orange-400 font-bold bg-orange-500/10 dark:bg-orange-400/10 px-2 py-1 rounded-full transition-colors ${
-                 !loadingChallenge && dailyChallengeId ? 'hover:bg-orange-500/20 dark:hover:bg-orange-400/20 cursor-pointer' : 'cursor-default'
-               }`}
-               title={!loadingChallenge && dailyChallengeId ? "Go to Daily Challenge" : "Practice Questions"}
-             >
-               <Flame className="w-4 h-4 fill-current" />
-               <span className="text-sm">{streak}</span>
-             </Link>
-           )}
 
-            {isAuthenticated && userInfo ? (
-              <div className="relative" ref={dropdownRef}>
-                {/* --- FIX: De-congest: smaller padding, avatar, chevron --- */}
-                <button onClick={() => setDropdownOpen(!dropdownOpen)} className="flex items-center gap-1 px-1 py-1 rounded-full hover:bg-slate-200/50 dark:hover:bg-slate-800/50 transition-colors group">
-                    <img
-                      src={userInfo.avatar || '/user.png'}
-                      alt={userInfo.name}
-                      className="w-7 h-7 md:w-8 md:h-8 rounded-full border-2 border-slate-300 dark:border-slate-700 group-hover:border-blue-500 transition-colors"
-                    />
-                  <span className="text-sm font-medium text-slate-700 dark:text-slate-300 hidden lg:block pr-1">
-                    {userInfo.name}
-                  </span>
-                  <ChevronDown className={`w-4 h-4 text-slate-500 transition-transform ${dropdownOpen ? 'rotate-180' : ''}`} />
-                </button>
-                {dropdownOpen && (
-                  <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-slate-900 rounded-xl shadow-lg py-2 border border-slate-200 dark:border-slate-700 z-50">
-                    
-                    {/* --- UPDATED: Dropdown now same for mobile/desktop. 'My Profile' is in BottomNav --- */}
-                    <div>
-                      {/* --- ADDED: My Profile link (was missing) --- */}
-                      <DropdownLink
-                        to={userInfo.username ? `/profile/${userInfo.username}` : '#'}
-                        onClick={() => setDropdownOpen(false)}
-                        icon={<User className="w-4 h-4" />}
-                        label="My Profile"
-                      />
-                      <DropdownLink
-                        to="/settings"
-                        onClick={() => setDropdownOpen(false)}
-                        icon={<Settings className="w-4 h-4" />}
-                        label="Settings"
-                      />
-                      {/* --- Admin Panel link added for mobile dropdown access --- */}
-                      {(userInfo?.role === 'admin' || userInfo?.role === 'moderator') && (
-                        <DropdownLink
-                          to="/admin"
-                          onClick={() => setDropdownOpen(false)}
-                          icon={<Shield className="w-4 h-4" />}
-                          label="Admin Panel"
-                        />
-                      )}
-                      <DropdownButton
-                        onClick={toggleTheme}
-                        icon={theme === 'light' ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
-                        label={theme === 'light' ? 'Dark Mode' : 'Light Mode'}
-                      />
-                      <div className="my-1 h-px bg-slate-200 dark:bg-slate-700"></div>
-                      <button
-                        onClick={() => { logout(); setDropdownOpen(false); }}
-                        className="w-full text-left flex items-center gap-3 px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-500/10 rounded-md mx-2"
-                      >
-                        <LogOut className="w-4 h-4" />
-                        Logout
-                      </button>
-                    </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={toggleTheme}
+              className="rounded-full w-9 h-9 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200/50 dark:hover:bg-zinc-800/50"
+              aria-label="Toggle theme"
+            >
+              {theme === 'light' ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
+            </Button>
 
-                  </div>
-                )}
-              </div>
-            ) : (
+            {isAuthenticated && streak > 0 && (
               <Link
-                to="/login"
-                // --- FIX: De-congest: smaller padding ---
-                className="px-3 py-1.5 bg-blue-600 text-white rounded-full hover:bg-blue-700 transition-colors text-sm font-medium shadow-sm hover:shadow-md"
+                to={!loadingChallenge && dailyChallengeId ? `/question/${dailyChallengeId}` : '/practice'}
+                className={cn(
+                  "flex items-center gap-1.5 px-2.5 py-1.5 rounded-full transition-all border",
+                  !loadingChallenge && dailyChallengeId
+                    ? "bg-orange-50 dark:bg-orange-950/30 text-orange-600 dark:text-orange-400 border-orange-200 dark:border-orange-900 hover:bg-orange-100 dark:hover:bg-orange-900/50"
+                    : "bg-zinc-100 dark:bg-zinc-900 text-zinc-500 cursor-default border-transparent"
+                )}
+                title={!loadingChallenge && dailyChallengeId ? "Daily Challenge" : "Practice Questions"}
               >
-                {/* --- UPDATED: Responsive Login Text --- */}
-                <span className="md:hidden">Login</span>
-                <span className="hidden md:inline">Login / Sign Up</span>
+                <Flame className={cn("w-4 h-4 fill-current", !loadingChallenge && dailyChallengeId && "animate-pulse")} />
+                <span className="text-sm font-bold tabular-nums">{streak}</span>
               </Link>
             )}
 
+            {isAuthenticated && userInfo ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" className="rounded-full w-9 h-9 border border-zinc-200 dark:border-zinc-800 p-0 overflow-hidden hover:opacity-90 transition-opacity">
+                    <img
+                      src={userInfo.avatar || '/user.png'}
+                      alt={userInfo.name}
+                      className="w-full h-full object-cover"
+                    />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56">
+                  <DropdownMenuLabel className="font-normal">
+                    <div className="flex flex-col space-y-1">
+                      <p className="text-sm font-medium leading-none">{userInfo.name}</p>
+                      <p className="text-xs leading-none text-muted-foreground">{userInfo.username ? `@${userInfo.username}` : ''}</p>
+                    </div>
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem asChild>
+                    <Link to={userInfo.username ? `/profile/${userInfo.username}` : '#'} className="cursor-pointer">
+                      <User className="mr-2 h-4 w-4" />
+                      <span>Profile</span>
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link to="/settings" className="cursor-pointer">
+                      <Settings className="mr-2 h-4 w-4" />
+                      <span>Settings</span>
+                    </Link>
+                  </DropdownMenuItem>
+                  {(userInfo?.role === 'admin' || userInfo?.role === 'moderator') && (
+                    <DropdownMenuItem asChild className="md:hidden">
+                      <Link to="/admin" className="cursor-pointer">
+                        <Shield className="mr-2 h-4 w-4" />
+                        <span>Admin Panel</span>
+                      </Link>
+                    </DropdownMenuItem>
+                  )}
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={toggleTheme} className="cursor-pointer">
+                    {theme === 'light' ? <Moon className="mr-2 h-4 w-4" /> : <Sun className="mr-2 h-4 w-4" />}
+                    <span>{theme === 'light' ? 'Dark Mode' : 'Light Mode'}</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={logout} className="text-red-600 dark:text-red-400 cursor-pointer focus:text-red-600 focus:bg-red-50 dark:focus:bg-red-950/50">
+                    <LogOut className="mr-2 h-4 w-4" />
+                    <span>Log out</span>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : (
+              <Button asChild size="sm" className="rounded-full px-4">
+                <Link to="/login">
+                  Login
+                </Link>
+              </Button>
+            )}
           </div>
         </div>
       </div>
-      
+
+      {/* Mobile Bottom Nav is handled in BottomNavbar.tsx, but we hide parts of this navbar on mobile via CSS if needed */}
     </nav>
   );
 }
-
-const NavLinkItem = ({ to, label, icon }: { to: string, label: string, icon?: React.ReactNode }) => {
-    const location = useLocation();
-    const isActive = location.pathname === to;
-    return (
-        <Link
-            to={to}
-            className={`flex items-center gap-2 text-sm font-medium transition-all duration-200 px-3 py-2 rounded-full ${
-                isActive
-                ? 'bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-300'
-                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-200/50 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-white'
-            }`}
-        >
-            {icon}
-            {label}
-        </Link>
-    )
-}
-
-const DropdownLink = ({ to, onClick, icon, label }: { to: string, onClick: () => void, icon?: React.ReactNode, label: string }) => (
-    <Link
-      to={to}
-      onClick={onClick}
-      className="flex items-center gap-3 px-4 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-blue-500/10 hover:text-blue-600 dark:hover:text-blue-300 rounded-md mx-2"
-    >
-      {icon}
-      {label}
-    </Link>
-)
-
-const DropdownButton = ({ onClick, icon, label }: { onClick: () => void, icon: React.ReactNode, label: string }) => (
-  <button
-    onClick={onClick}
-    className="w-full text-left flex items-center gap-3 px-4 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-blue-500/10 hover:text-blue-600 dark:hover:text-blue-300 rounded-md mx-2"
-  >
-    {icon}
-    {label}
-  </button>
-)

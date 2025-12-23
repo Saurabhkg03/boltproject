@@ -1,120 +1,119 @@
 import { BrowserRouter, Routes, Route, useLocation, Navigate } from 'react-router-dom';
-// --- FIX: Adding .tsx extensions back to all local imports ---
-import { ThemeProvider } from './contexts/ThemeContext.tsx';
-import { AuthProvider, useAuth } from './contexts/AuthContext.tsx';
-import { DailyChallengeProvider } from './contexts/DailyChallengeContext.tsx';
-import { MetadataProvider } from './contexts/MetadataContext.tsx'; 
-import { Navbar } from './components/Navbar.tsx';
-import { BottomNavbar } from './components/BottomNavbar.tsx';
-import { ProtectedRoute } from './components/ProtectedRoute.tsx';
-import { Home } from './pages/Home.tsx';
-import { Practice } from './pages/Practice.tsx';
-import { QuestionDetail } from './pages/QuestionDetail.tsx';
-import { Leaderboard } from './pages/Leaderboard.tsx';
-import { Profile } from './pages/Profile.tsx';
-import { Login } from './pages/Login.tsx';
-import { AdminPanel } from './pages/AdminPanel.tsx';
-import { AddQuestion } from './pages/AddQuestion.tsx';
-import { Settings } from './pages/Settings.tsx';
+import { ThemeProvider } from './contexts/ThemeContext';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { DailyChallengeProvider } from './contexts/DailyChallengeContext';
+import { MetadataProvider } from './contexts/MetadataContext';
+import { Navbar } from './components/Navbar';
+import { BottomNavbar } from './components/BottomNavbar';
+import { ProtectedRoute } from './components/ProtectedRoute';
+import { Home } from './pages/Home';
+import { Practice } from './pages/Practice';
+import { QuestionDetail } from './pages/QuestionDetail';
+import { Leaderboard } from './pages/Leaderboard';
+import { Profile } from './pages/Profile';
+import { Login } from './pages/Login';
+import { AdminPanel } from './pages/AdminPanel';
+import { AddQuestion } from './pages/AddQuestion';
+import { Settings } from './pages/Settings';
 import { useEffect } from 'react';
-import { NotFound } from './pages/NotFound.tsx';
+import { NotFound } from './pages/NotFound';
+
+import { AnimatePresence } from 'framer-motion';
+import { PageTransition } from './components/PageTransition';
 
 const AppContent = () => {
-  const { userInfo, loading, isAuthenticated } = useAuth(); 
+  const { userInfo, loading, isAuthenticated } = useAuth();
   const location = useLocation();
 
   useEffect(() => {
-    // This effect runs when the authentication state is resolved.
     if (!loading) {
       const loader = document.getElementById('loader-wrapper');
       if (loader) {
-        // Add a class to fade the loader out.
         loader.classList.add('hidden');
-        // Optional: remove it from the DOM after the transition so it doesn't interfere.
         setTimeout(() => {
           if (loader) {
             loader.style.display = 'none';
           }
-        }, 500); // Match this duration with your CSS transition.
+        }, 500);
       }
     }
   }, [loading]);
 
-  // While the auth state is loading, we show the static HTML loader,
-  // so we can return null here to prevent rendering the main app.
   if (loading) {
     return null;
   }
 
-  // Handle initial profile setup redirect *only if authenticated*
   if (isAuthenticated && userInfo && userInfo.needsSetup && location.pathname !== '/settings') {
     return <Navigate to="/settings" state={{ from: location }} replace />;
   }
-  
+
   const showNav = location.pathname !== '/login';
 
   return (
     <>
-      {/* --- UPDATED: Show Top Nav always, Bottom Nav only on mobile --- */}
       {showNav && (
         <>
-          <Navbar /> {/* Always show top navbar */}
-          <div className="md:hidden"> {/* Wrapper to hide BottomNavbar on desktop */}
+          <Navbar />
+          <div className="md:hidden">
             <BottomNavbar />
           </div>
         </>
       )}
-      {/* --- END UPDATED --- */}
 
-      {/* --- UPDATED: Add padding-bottom for mobile nav --- */}
       <main className="relative z-10 pb-16 md:pb-0">
-        <Routes>
-          {/* Public Routes */}
-          <Route path="/" element={<Home />} />
-          <Route path="/practice" element={<Practice />} />
-          <Route path="/leaderboard" element={<Leaderboard />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/profile/:username" element={<Profile />} />
-          <Route path="/question/:id" element={<QuestionDetail />} />
+        <AnimatePresence mode="wait">
+          <Routes location={location} key={location.pathname}>
+            <Route path="/" element={<PageTransition><Home /></PageTransition>} />
+            <Route path="/practice" element={<PageTransition><Practice /></PageTransition>} />
+            <Route path="/leaderboard" element={<PageTransition><Leaderboard /></PageTransition>} />
+            <Route path="/login" element={<PageTransition><Login /></PageTransition>} />
+            <Route path="/profile/:username" element={<PageTransition><Profile /></PageTransition>} />
+            <Route path="/question/:id" element={<PageTransition><QuestionDetail /></PageTransition>} />
 
-
-          {/* Protected Routes */}
             <Route
-            path="/settings"
-            element={
-              <ProtectedRoute>
-                <Settings />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/admin"
-            element={
-              <ProtectedRoute allowedRoles={['admin', 'moderator']}> {/* Restrict by role */}
-                <AdminPanel />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/add-question"
-            element={
-              <ProtectedRoute allowedRoles={['admin', 'moderator']}> {/* Restrict by role */}
-                <AddQuestion />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/edit-question/:id"
-            element={
-              <ProtectedRoute allowedRoles={['admin', 'moderator']}> {/* Restrict by role */}
-                <AddQuestion />
-              </ProtectedRoute>
-            }
-          />
+              path="/settings"
+              element={
+                <PageTransition>
+                  <ProtectedRoute>
+                    <Settings />
+                  </ProtectedRoute>
+                </PageTransition>
+              }
+            />
+            <Route
+              path="/admin"
+              element={
+                <PageTransition>
+                  <ProtectedRoute allowedRoles={['admin', 'moderator']}>
+                    <AdminPanel />
+                  </ProtectedRoute>
+                </PageTransition>
+              }
+            />
+            <Route
+              path="/add-question"
+              element={
+                <PageTransition>
+                  <ProtectedRoute allowedRoles={['admin', 'moderator']}>
+                    <AddQuestion />
+                  </ProtectedRoute>
+                </PageTransition>
+              }
+            />
+            <Route
+              path="/edit-question/:id"
+              element={
+                <PageTransition>
+                  <ProtectedRoute allowedRoles={['admin', 'moderator']}>
+                    <AddQuestion />
+                  </ProtectedRoute>
+                </PageTransition>
+              }
+            />
 
-          {/* Fallback Not Found Route */}
-          <Route path="*" element={<NotFound />} />
-        </Routes>
+            <Route path="*" element={<PageTransition><NotFound /></PageTransition>} />
+          </Routes>
+        </AnimatePresence>
       </main>
     </>
   );
@@ -125,10 +124,9 @@ function App() {
     <ThemeProvider>
       <BrowserRouter>
         <AuthProvider>
-         {/* --- REFACTOR: Removed redundant BranchProvider --- */}
           <MetadataProvider>
             <DailyChallengeProvider>
-              <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
+              <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950">
                 <AppContent />
               </div>
             </DailyChallengeProvider>

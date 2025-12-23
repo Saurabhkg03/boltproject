@@ -17,33 +17,33 @@ declare global {
 
 const RATING_SCALING_FACTOR = 100;
 const calculateRating = (accuracy: number | undefined, correct: number | undefined): number => {
-    const safeAccuracy = accuracy ?? 0;
-    const safeCorrect = correct ?? 0;
-    const rating = Math.max(0, (safeAccuracy / 100) * Math.log10(safeCorrect + 1) * RATING_SCALING_FACTOR);
-    return parseFloat(rating.toFixed(2));
+  const safeAccuracy = accuracy ?? 0;
+  const safeCorrect = correct ?? 0;
+  const rating = Math.max(0, (safeAccuracy / 100) * Math.log10(safeCorrect + 1) * RATING_SCALING_FACTOR);
+  return parseFloat(rating.toFixed(2));
 };
 function formatDate(date: Date | string): string | null {
-    if (!(date instanceof Date)) {
-        try {
-            date = new Date(date);
-            if (isNaN(date.getTime())) throw new Error("Invalid date");
-        } catch (e) {
-            console.warn("Could not parse date:", date, (e as Error).message);
-            return null;
-        }
+  if (!(date instanceof Date)) {
+    try {
+      date = new Date(date);
+      if (isNaN(date.getTime())) throw new Error("Invalid date");
+    } catch (e) {
+      console.warn("Could not parse date:", date, (e as Error).message);
+      return null;
     }
-    return date.toISOString().split('T')[0];
+  }
+  return date.toISOString().split('T')[0];
 }
 function getDayDiff(date1: Date, date2: Date): number {
-    const d1 = new Date(date1.toDateString());
-    const d2 = new Date(date2.toDateString());
-    const diffTime = Math.abs(d1.getTime() - d2.getTime());
-    return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  const d1 = new Date(date1.toDateString());
+  const d2 = new Date(date2.toDateString());
+  const diffTime = Math.abs(d1.getTime() - d2.getTime());
+  return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 }
 // --- UPDATED: Function to handle lazy-loaded images ---
 const extractAndCleanHtml = (html: string, contentClass?: string): string => {
   if (!html) return '';
-  
+
   // 1. Remove noscript tags
   let clean = html.replace(/<noscript>[\s\S]*?<\/noscript>/gi, '');
 
@@ -66,7 +66,7 @@ const extractAndCleanHtml = (html: string, contentClass?: string): string => {
     }
     return ''; // remove class attribute entirely if lazyload was the only class
   });
-  
+
   // 4. Extract content class if specified
   if (contentClass) {
     const regex = new RegExp(`<div[^>]*class=["'][^"']*${contentClass}[^"']*["'][^>]*>([\\s\\S]*?)<\/div>`, 'i');
@@ -81,28 +81,28 @@ const extractAndCleanHtml = (html: string, contentClass?: string): string => {
   return clean.trim();
 };
 const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60).toString().padStart(2, '0');
-    const secs = (seconds % 60).toString().padStart(2, '0');
-    return `${mins}:${secs}`;
+  const mins = Math.floor(seconds / 60).toString().padStart(2, '0');
+  const secs = (seconds % 60).toString().padStart(2, '0');
+  return `${mins}:${secs}`;
 };
 
 const LoginPrompt = () => {
-    const location = useParams();
-    return (
-        <div className="mb-6 p-4 bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-lg flex flex-col sm:flex-row items-center justify-between gap-4">
-            <p className="text-blue-800 dark:text-blue-200 text-sm font-medium text-center sm:text-left">
-                You need to be logged in to attempt questions, track progress, save notes, and use other features.
-            </p>
-            <Link
-                to="/login"
-                state={{ from: location }}
-                className="flex-shrink-0 inline-flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-blue-700 transition-colors text-sm shadow-md hover:shadow-lg"
-            >
-                <LogIn className="w-4 h-4" />
-                Login / Sign Up
-            </Link>
-        </div>
-    );
+  const location = useParams();
+  return (
+    <div className="mb-6 p-4 bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-lg flex flex-col sm:flex-row items-center justify-between gap-4">
+      <p className="text-blue-800 dark:text-blue-200 text-sm font-medium text-center sm:text-left">
+        You need to be logged in to attempt questions, track progress, save notes, and use other features.
+      </p>
+      <Link
+        to="/login"
+        state={{ from: location }}
+        className="flex-shrink-0 inline-flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-blue-700 transition-colors text-sm shadow-md hover:shadow-lg"
+      >
+        <LogIn className="w-4 h-4" />
+        Login / Sign Up
+      </Link>
+    </div>
+  );
 };
 
 const ListsModal = ({
@@ -120,7 +120,7 @@ const ListsModal = ({
   const [questionListIds, setQuestionListIds] = useState<Set<string>>(new Set());
   const [loadingLists, setLoadingLists] = useState(true);
   const [saving, setSaving] = useState(false);
-  
+
   const [newListName, setNewListName] = useState("");
   const [creatingList, setCreatingList] = useState(false);
 
@@ -165,33 +165,33 @@ const ListsModal = ({
   };
 
   const handleCreateList = async (e: React.FormEvent) => {
-      e.preventDefault();
-      if (!newListName.trim() || creatingList) return;
-      
-      setCreatingList(true);
-      try {
-          const newListData: Omit<QuestionList, 'id' | 'createdAt'> = {
-              uid: userId,
-              name: newListName.trim(),
-              questionIds: [questionId],
-              isPrivate: false,
-          };
-          
-          const listCollectionRef = collection(db, `users/${userId}/questionLists`);
-          const docRef = await addDoc(listCollectionRef, {
-              ...newListData,
-              createdAt: serverTimestamp() 
-          });
-          
-          setLists(prev => [{ ...newListData, id: docRef.id, questionIds: [questionId], createdAt: new Date().toISOString() }, ...prev]);
-          handleToggleList(docRef.id);
-          setNewListName("");
-          
-      } catch (error) {
-          console.error("Error creating new list:", error);
-      } finally {
-          setCreatingList(false);
-      }
+    e.preventDefault();
+    if (!newListName.trim() || creatingList) return;
+
+    setCreatingList(true);
+    try {
+      const newListData: Omit<QuestionList, 'id' | 'createdAt'> = {
+        uid: userId,
+        name: newListName.trim(),
+        questionIds: [questionId],
+        isPrivate: false,
+      };
+
+      const listCollectionRef = collection(db, `users/${userId}/questionLists`);
+      const docRef = await addDoc(listCollectionRef, {
+        ...newListData,
+        createdAt: serverTimestamp()
+      });
+
+      setLists(prev => [{ ...newListData, id: docRef.id, questionIds: [questionId], createdAt: new Date().toISOString() }, ...prev]);
+      handleToggleList(docRef.id);
+      setNewListName("");
+
+    } catch (error) {
+      console.error("Error creating new list:", error);
+    } finally {
+      setCreatingList(false);
+    }
   };
 
   const handleSaveChanges = async () => {
@@ -205,7 +205,7 @@ const ListsModal = ({
     lists.forEach(list => {
       const questionIsInList = list.questionIds && list.questionIds.includes(questionId);
       const questionShouldBeInList = questionListIds.has(list.id);
-      
+
       const listRef = doc(db, `users/${userId}/questionLists`, list.id);
 
       if (questionShouldBeInList && !questionIsInList) {
@@ -229,60 +229,60 @@ const ListsModal = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={onClose}>
-      <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl p-6 max-w-md w-full relative transform transition-all" onClick={e => e.stopPropagation()}>
-        <button onClick={onClose} className="absolute top-3 right-3 p-1.5 rounded-full text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
+      <div className="bg-white dark:bg-zinc-900 rounded-xl shadow-2xl p-6 max-w-md w-full relative transform transition-all" onClick={e => e.stopPropagation()}>
+        <button onClick={onClose} className="absolute top-3 right-3 p-1.5 rounded-full text-zinc-500 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors">
           <XIcon className="w-5 h-5" />
         </button>
-        <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">Save to...</h3>
-        
+        <h3 className="text-lg font-semibold text-zinc-900 dark:text-white mb-4">Save to...</h3>
+
         {loadingLists ? (
-            <div className="flex justify-center items-center h-40">
-                <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
-            </div>
+          <div className="flex justify-center items-center h-40">
+            <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+          </div>
         ) : (
-            <>
-                <form onSubmit={handleCreateList} className="flex gap-2 mb-4">
-                    <input
-                        type="text"
-                        value={newListName}
-                        onChange={e => setNewListName(e.target.value)}
-                        placeholder="Create new list..."
-                        className="flex-1 px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm"
-                    />
-                    <button type="submit" disabled={creatingList || !newListName.trim()} className="p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-slate-400 dark:disabled:bg-slate-600">
-                        {creatingList ? <Loader2 className="w-5 h-5 animate-spin" /> : <FolderPlus className="w-5 h-5" />}
-                    </button>
-                </form>
+          <>
+            <form onSubmit={handleCreateList} className="flex gap-2 mb-4">
+              <input
+                type="text"
+                value={newListName}
+                onChange={e => setNewListName(e.target.value)}
+                placeholder="Create new list..."
+                className="flex-1 px-3 py-2 border border-zinc-300 dark:border-zinc-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white text-sm"
+              />
+              <button type="submit" disabled={creatingList || !newListName.trim()} className="p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-zinc-400 dark:disabled:bg-zinc-600">
+                {creatingList ? <Loader2 className="w-5 h-5 animate-spin" /> : <FolderPlus className="w-5 h-5" />}
+              </button>
+            </form>
 
-                <div className="max-h-60 overflow-y-auto space-y-2 mb-4 pr-1">
-                    {lists.length === 0 && (
-                        <p className="text-sm text-slate-500 dark:text-slate-400 text-center py-4">No lists created yet.</p>
-                    )}
-                    {lists.map(list => (
-                        <label
-                            key={list.id}
-                            className="flex items-center gap-3 p-3 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
-                        >
-                            <input
-                                type="checkbox"
-                                checked={questionListIds.has(list.id)}
-                                onChange={() => handleToggleList(list.id)}
-                                className="w-5 h-5 rounded text-blue-600 focus:ring-blue-500"
-                            />
-                            <span className="text-sm font-medium text-slate-700 dark:text-slate-200">{list.name}</span>
-                        </label>
-                    ))}
-                </div>
-
-                <button
-                    onClick={handleSaveChanges}
-                    disabled={saving}
-                    className="w-full py-2.5 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 disabled:bg-slate-400 dark:disabled:bg-slate-600 flex items-center justify-center gap-2"
+            <div className="max-h-60 overflow-y-auto space-y-2 mb-4 pr-1">
+              {lists.length === 0 && (
+                <p className="text-sm text-zinc-500 dark:text-zinc-400 text-center py-4">No lists created yet.</p>
+              )}
+              {lists.map(list => (
+                <label
+                  key={list.id}
+                  className="flex items-center gap-3 p-3 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer"
                 >
-                    {saving ? <Loader2 className="w-5 h-5 animate-spin"/> : <CheckIcon className="w-5 h-5" />}
-                    Done
-                </button>
-            </>
+                  <input
+                    type="checkbox"
+                    checked={questionListIds.has(list.id)}
+                    onChange={() => handleToggleList(list.id)}
+                    className="w-5 h-5 rounded text-blue-600 focus:ring-blue-500"
+                  />
+                  <span className="text-sm font-medium text-zinc-700 dark:text-zinc-200">{list.name}</span>
+                </label>
+              ))}
+            </div>
+
+            <button
+              onClick={handleSaveChanges}
+              disabled={saving}
+              className="w-full py-2.5 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 disabled:bg-zinc-400 dark:disabled:bg-zinc-600 flex items-center justify-center gap-2"
+            >
+              {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <CheckIcon className="w-5 h-5" />}
+              Done
+            </button>
+          </>
         )}
       </div>
     </div>
@@ -313,7 +313,7 @@ export function QuestionDetail() {
   const questionRef = useRef<HTMLDivElement>(null);
   const explanationRef = useRef<HTMLDivElement>(null);
   const optionsRef = useRef<(HTMLButtonElement | null)[]>([]);
-  
+
   const handleResetTimer = () => {
     setTimeElapsed(0);
   };
@@ -325,7 +325,7 @@ export function QuestionDetail() {
         console.log("[QuestionDetail] Waiting for ID or questionCollectionPath...");
         return;
       }
-      if(timerRef.current) clearInterval(timerRef.current);
+      if (timerRef.current) clearInterval(timerRef.current);
       setLoadingData(true);
       setSubmitted(false);
       setSelectedOptions([]);
@@ -347,12 +347,12 @@ export function QuestionDetail() {
           if (user && isAuthenticated && !loadingAuth) {
             const submissionRef = doc(db, `users/${user.uid}/submissions`, id);
             const userQuestionDataRef = doc(db, `users/${user.uid}/userQuestionData`, id);
-            
+
             const [submissionSnap, userQuestionDataSnap] = await Promise.all([
-                getDoc(submissionRef),
-                getDoc(userQuestionDataRef)
+              getDoc(submissionRef),
+              getDoc(userQuestionDataRef)
             ]);
-            
+
             if (submissionSnap.exists()) {
               const sub = submissionSnap.data() as Submission;
               if (sub.branch === selectedBranch) {
@@ -364,9 +364,9 @@ export function QuestionDetail() {
               }
             }
             if (userQuestionDataSnap.exists()) {
-                const data = userQuestionDataSnap.data() as UserQuestionData;
-                setIsFavorite(data.isFavorite || false);
-                setNote(data.note || '');
+              const data = userQuestionDataSnap.data() as UserQuestionData;
+              setIsFavorite(data.isFavorite || false);
+              setNote(data.note || '');
             }
           }
         } else {
@@ -383,64 +383,64 @@ export function QuestionDetail() {
     fetchAllData();
 
     return () => {
-        if(timerRef.current) clearInterval(timerRef.current);
+      if (timerRef.current) clearInterval(timerRef.current);
     }
   }, [id, user, loadingAuth, isAuthenticated, setUserInfo, questionCollectionPath, selectedBranch]);
 
 
-    useEffect(() => {
-        if (isAuthenticated && isTimerOn && !submitted) {
-            timerRef.current = window.setInterval(() => {
-                setTimeElapsed(prev => prev + 1);
-            }, 1000);
-        } else {
-            if (timerRef.current) {
-                clearInterval(timerRef.current);
-            }
-        }
-        return () => {
-            if (timerRef.current) {
-                clearInterval(timerRef.current);
-            }
-        };
-    }, [isAuthenticated, isTimerOn, submitted]);
+  useEffect(() => {
+    if (isAuthenticated && isTimerOn && !submitted) {
+      timerRef.current = window.setInterval(() => {
+        setTimeElapsed(prev => prev + 1);
+      }, 1000);
+    } else {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+      }
+    }
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+      }
+    };
+  }, [isAuthenticated, isTimerOn, submitted]);
 
   useEffect(() => {
     const renderKatex = () => {
-        if (loadingData || !question || typeof window.renderMathInElement !== 'function') return;
-        const renderOptions = {
-            delimiters: [
-            { left: '[latex]', right: '[/latex]', display: true },
-            { left: '$$', right: '$$', display: true },
-            { left: '$', right: '$', display: false },
-            { left: '\\(', right: '\\)', display: false },
-            { left: '\\[', right: '\\]', display: true }
-            ],
-            throwOnError: false
-        };
-        if (questionRef.current) {
-            window.renderMathInElement(questionRef.current, renderOptions);
-        }
-        if (submitted && explanationRef.current) {
-            window.renderMathInElement(explanationRef.current, renderOptions);
-        }
-        optionsRef.current.forEach(el => {
-            if (el) window.renderMathInElement(el, renderOptions);
-        });
+      if (loadingData || !question || typeof window.renderMathInElement !== 'function') return;
+      const renderOptions = {
+        delimiters: [
+          { left: '[latex]', right: '[/latex]', display: true },
+          { left: '$$', right: '$$', display: true },
+          { left: '$', right: '$', display: false },
+          { left: '\\(', right: '\\)', display: false },
+          { left: '\\[', right: '\\]', display: true }
+        ],
+        throwOnError: false
+      };
+      if (questionRef.current) {
+        window.renderMathInElement(questionRef.current, renderOptions);
+      }
+      if (submitted && explanationRef.current) {
+        window.renderMathInElement(explanationRef.current, renderOptions);
+      }
+      optionsRef.current.forEach(el => {
+        if (el) window.renderMathInElement(el, renderOptions);
+      });
     };
 
     let katexReadyCheckInterval: number | null = null;
 
     if (typeof window.renderMathInElement !== 'function') {
-        katexReadyCheckInterval = window.setInterval(() => {
-            if (typeof window.renderMathInElement === 'function') {
-                renderKatex();
-                if(katexReadyCheckInterval !== null) clearInterval(katexReadyCheckInterval);
-            }
-        }, 100);
+      katexReadyCheckInterval = window.setInterval(() => {
+        if (typeof window.renderMathInElement === 'function') {
+          renderKatex();
+          if (katexReadyCheckInterval !== null) clearInterval(katexReadyCheckInterval);
+        }
+      }, 100);
     } else {
-        const renderTimeout = setTimeout(renderKatex, 50);
-        return () => clearTimeout(renderTimeout);
+      const renderTimeout = setTimeout(renderKatex, 50);
+      return () => clearTimeout(renderTimeout);
     }
 
     return () => {
@@ -464,14 +464,14 @@ export function QuestionDetail() {
 
   const handleSubmit = async () => {
     if (!user || !question || !userInfo || submitted || !selectedBranch) return;
-    
+
     setIsTimerOn(false);
     let userCorrect = false;
     const today = new Date();
     const todayStr = formatDate(today);
     if (!todayStr) {
-        console.error("Could not format today's date.");
-        return;
+      console.error("Could not format today's date.");
+      return;
     }
 
     if (question.question_type === 'nat') {
@@ -479,21 +479,21 @@ export function QuestionDetail() {
       const min = parseFloat(question.nat_answer_min || '-Infinity');
       const max = parseFloat(question.nat_answer_max || 'Infinity');
       if (isNaN(userAnswer)) {
-          userCorrect = false;
+        userCorrect = false;
       } else {
-          userCorrect = userAnswer >= min && userAnswer <= max;
+        userCorrect = userAnswer >= min && userAnswer <= max;
       }
     } else if (question.question_type === 'msq') {
       const correctLabels = new Set(question.options.filter(o => o.is_correct).map(o => o.label));
       const selectedLabels = new Set(selectedOptions);
       userCorrect = correctLabels.size === selectedLabels.size &&
-                    [...correctLabels].every(label => selectedLabels.has(label));
+        [...correctLabels].every(label => selectedLabels.has(label));
     } else {
       if (!selectedOptions[0]) return;
       const correctOption = question.options.find(opt => opt.is_correct);
       userCorrect = selectedOptions[0] === correctOption?.label;
     }
-    
+
     setIsCorrect(userCorrect);
     setSubmitted(true);
 
@@ -502,7 +502,7 @@ export function QuestionDetail() {
       uid: user.uid,
       correct: userCorrect,
       timestamp: today.toISOString(),
-      selectedOptions: selectedOptions, 
+      selectedOptions: selectedOptions,
       natAnswer: natAnswer || '',
       timeTaken: timeElapsed > 0 ? timeElapsed : 0,
       branch: selectedBranch
@@ -511,7 +511,7 @@ export function QuestionDetail() {
     try {
       const defaultStats: UserStats = { attempted: 0, correct: 0, accuracy: 0, subjects: {} };
       const defaultStreak: UserStreakData = { currentStreak: 0, lastSubmissionDate: '' };
-      
+
       const oldBranchStats = userInfo.branchStats?.[selectedBranch] || defaultStats;
       const oldBranchStreak = userInfo.branchStreakData?.[selectedBranch] || defaultStreak;
       const oldBranchCalendar = userInfo.branchActivityCalendar?.[selectedBranch] || {};
@@ -531,9 +531,9 @@ export function QuestionDetail() {
       if (todayStr !== oldBranchStreak.lastSubmissionDate) {
         const lastSubDate = oldBranchStreak.lastSubmissionDate ? new Date(oldBranchStreak.lastSubmissionDate + 'T00:00:00') : null;
         if (lastSubDate && getDayDiff(today, lastSubDate) === 1) {
-            newBranchStreakData.currentStreak = (oldBranchStreak.currentStreak || 0) + 1;
+          newBranchStreakData.currentStreak = (oldBranchStreak.currentStreak || 0) + 1;
         } else {
-            newBranchStreakData.currentStreak = 1;
+          newBranchStreakData.currentStreak = 1;
         }
         newBranchStreakData.lastSubmissionDate = todayStr;
       }
@@ -550,18 +550,18 @@ export function QuestionDetail() {
       batch.set(submissionDocRef, submissionData);
 
       batch.update(userDocRef, {
-          [`branchStats.${selectedBranch}`]: newBranchStats,
-          [`branchStreakData.${selectedBranch}`]: newBranchStreakData,
-          [`branchActivityCalendar.${selectedBranch}`]: newBranchCalendar,
-          [`ratings.${selectedBranch}`]: newBranchRating
+        [`branchStats.${selectedBranch}`]: newBranchStats,
+        [`branchStreakData.${selectedBranch}`]: newBranchStreakData,
+        [`branchActivityCalendar.${selectedBranch}`]: newBranchCalendar,
+        [`ratings.${selectedBranch}`]: newBranchRating
       });
-      
+
       await batch.commit();
       console.log(`Successfully submitted and updated user stats for branch: ${selectedBranch}`);
 
       setUserInfo(prev => {
         if (!prev) return null;
-        
+
         const newBranchStatsMap = { ...prev.branchStats, [selectedBranch]: newBranchStats };
         const newBranchStreakMap = { ...prev.branchStreakData, [selectedBranch]: newBranchStreakData };
         const newBranchCalendarMap = { ...prev.branchActivityCalendar, [selectedBranch]: newBranchCalendar };
@@ -577,68 +577,68 @@ export function QuestionDetail() {
       });
 
     } catch (error) {
-        console.error("Error saving submission/updating stats:", error);
-        setSubmitted(false);
-        setIsCorrect(false);
+      console.error("Error saving submission/updating stats:", error);
+      setSubmitted(false);
+      setIsCorrect(false);
     }
   };
-  
+
   const handleTryAgain = async () => {
     if (!user || !question || !userInfo || resetting || !selectedBranch) return;
     setResetting(true);
 
     try {
-        const defaultStats: UserStats = { attempted: 0, correct: 0, accuracy: 0, subjects: {} };
-        const oldBranchStats = userInfo.branchStats?.[selectedBranch] || defaultStats;
-        const newBranchStats = { ...oldBranchStats, subjects: { ...(oldBranchStats.subjects || {}) } };
-        
-        if (newBranchStats.attempted > 0) {
-            newBranchStats.attempted -= 1;
+      const defaultStats: UserStats = { attempted: 0, correct: 0, accuracy: 0, subjects: {} };
+      const oldBranchStats = userInfo.branchStats?.[selectedBranch] || defaultStats;
+      const newBranchStats = { ...oldBranchStats, subjects: { ...(oldBranchStats.subjects || {}) } };
+
+      if (newBranchStats.attempted > 0) {
+        newBranchStats.attempted -= 1;
+      }
+      if (isCorrect && newBranchStats.correct > 0) {
+        newBranchStats.correct -= 1;
+        const subject = question.subject;
+        if (subject && subject !== "General" && subject !== "N/A" && (newBranchStats.subjects[subject] || 0) > 0) {
+          newBranchStats.subjects[subject] -= 1;
         }
-        if (isCorrect && newBranchStats.correct > 0) {
-            newBranchStats.correct -= 1;
-            const subject = question.subject;
-            if (subject && subject !== "General" && subject !== "N/A" && (newBranchStats.subjects[subject] || 0) > 0) {
-                newBranchStats.subjects[subject] -= 1;
-            }
-        }
-        newBranchStats.accuracy = newBranchStats.attempted > 0 ? parseFloat(((newBranchStats.correct / newBranchStats.attempted) * 100).toFixed(2)) : 0;
+      }
+      newBranchStats.accuracy = newBranchStats.attempted > 0 ? parseFloat(((newBranchStats.correct / newBranchStats.attempted) * 100).toFixed(2)) : 0;
 
-        const newBranchRating = calculateRating(newBranchStats.accuracy, newBranchStats.correct);
-        
-        const userDocRef = doc(db, 'users', user.uid);
-        const submissionDocRef = doc(db, `users/${user.uid}/submissions`, question.id);
+      const newBranchRating = calculateRating(newBranchStats.accuracy, newBranchStats.correct);
 
-        const batch = writeBatch(db);
-        batch.delete(submissionDocRef);
-        
-        batch.update(userDocRef, { 
-            [`branchStats.${selectedBranch}`]: newBranchStats,
-            [`ratings.${selectedBranch}`]: newBranchRating
-        });
+      const userDocRef = doc(db, 'users', user.uid);
+      const submissionDocRef = doc(db, `users/${user.uid}/submissions`, question.id);
 
-        await batch.commit();
-        console.log(`Successfully reset submission and updated user stats for branch: ${selectedBranch}`);
+      const batch = writeBatch(db);
+      batch.delete(submissionDocRef);
 
-        setUserInfo(prev => {
-            if (!prev) return null;
-            
-            const newBranchStatsMap = { ...prev.branchStats, [selectedBranch]: newBranchStats };
-            const newRatingsMap = { ...prev.ratings, [selectedBranch]: newBranchRating };
-            
-            return {
-                ...prev,
-                branchStats: newBranchStatsMap,
-                ratings: newRatingsMap
-            };
-        });
+      batch.update(userDocRef, {
+        [`branchStats.${selectedBranch}`]: newBranchStats,
+        [`ratings.${selectedBranch}`]: newBranchRating
+      });
 
-        setSubmitted(false);
-        setSelectedOptions([]);
-        setNatAnswer('');
-        setIsCorrect(false);
-        setTimeElapsed(0);
-        setIsTimerOn(false);
+      await batch.commit();
+      console.log(`Successfully reset submission and updated user stats for branch: ${selectedBranch}`);
+
+      setUserInfo(prev => {
+        if (!prev) return null;
+
+        const newBranchStatsMap = { ...prev.branchStats, [selectedBranch]: newBranchStats };
+        const newRatingsMap = { ...prev.ratings, [selectedBranch]: newBranchRating };
+
+        return {
+          ...prev,
+          branchStats: newBranchStatsMap,
+          ratings: newRatingsMap
+        };
+      });
+
+      setSubmitted(false);
+      setSelectedOptions([]);
+      setNatAnswer('');
+      setIsCorrect(false);
+      setTimeElapsed(0);
+      setIsTimerOn(false);
 
     } catch (error) {
       console.error("Error resetting question:", error);
@@ -646,7 +646,7 @@ export function QuestionDetail() {
       setResetting(false);
     }
   };
-  
+
   const handleToggleFavorite = async () => {
     if (!user || !id) return;
     const newFavoriteStatus = !isFavorite;
@@ -656,44 +656,44 @@ export function QuestionDetail() {
     const favoritesListRef = doc(db, `users/${user.uid}/questionLists`, 'favorites');
 
     try {
-        const batch = writeBatch(db);
-        batch.set(userQuestionDataRef, { isFavorite: newFavoriteStatus }, { merge: true });
+      const batch = writeBatch(db);
+      batch.set(userQuestionDataRef, { isFavorite: newFavoriteStatus }, { merge: true });
 
-        if (newFavoriteStatus) {
-            batch.set(favoritesListRef, { 
-                questionIds: arrayUnion(id),
-                name: "Favorites",
-                uid: user.uid,
-                createdAt: serverTimestamp()
-            }, { merge: true });
-        } else {
-            batch.update(favoritesListRef, { 
-                questionIds: arrayRemove(id) 
-            });
-        }
-        
-        await batch.commit();
-        console.log("Favorite status and favorites list updated.");
+      if (newFavoriteStatus) {
+        batch.set(favoritesListRef, {
+          questionIds: arrayUnion(id),
+          name: "Favorites",
+          uid: user.uid,
+          createdAt: serverTimestamp()
+        }, { merge: true });
+      } else {
+        batch.update(favoritesListRef, {
+          questionIds: arrayRemove(id)
+        });
+      }
+
+      await batch.commit();
+      console.log("Favorite status and favorites list updated.");
 
     } catch (error) {
-        console.error("Error toggling favorite status:", error);
-        setIsFavorite(!newFavoriteStatus);
+      console.error("Error toggling favorite status:", error);
+      setIsFavorite(!newFavoriteStatus);
     }
   }
 
   const handleSaveNote = async () => {
-      if (!user || !id) return;
-      setSavingNote(true);
-      const userQuestionDataRef = doc(db, `users/${user.uid}/userQuestionData`, id);
-      try {
-          await setDoc(userQuestionDataRef, { note: note }, { merge: true });
-      } catch (error) {
-          console.error("Error saving note: ", error);
-      } finally {
-          setSavingNote(false);
-      }
+    if (!user || !id) return;
+    setSavingNote(true);
+    const userQuestionDataRef = doc(db, `users/${user.uid}/userQuestionData`, id);
+    try {
+      await setDoc(userQuestionDataRef, { note: note }, { merge: true });
+    } catch (error) {
+      console.error("Error saving note: ", error);
+    } finally {
+      setSavingNote(false);
+    }
   }
-  
+
   const findNextQuestionId = () => {
     if (!id || !metadata?.allQuestionIds) return null;
     const currentIndex = metadata.allQuestionIds.indexOf(id);
@@ -702,7 +702,7 @@ export function QuestionDetail() {
     }
     return null;
   };
-  
+
   const findPrevQuestionId = () => {
     if (!id || !metadata?.allQuestionIds) return null;
     const currentIndex = metadata.allQuestionIds.indexOf(id);
@@ -723,7 +723,7 @@ export function QuestionDetail() {
   const handlePrev = () => {
     const prevId = findPrevQuestionId();
     if (prevId) {
-        navigate(`/question/${prevId}`);
+      navigate(`/question/${prevId}`);
     }
   };
 
@@ -764,20 +764,20 @@ export function QuestionDetail() {
       default: return 'text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/50';
     }
   };
-  
+
   const cleanedQuestionHtml = extractAndCleanHtml(question.question_html, 'question_text');
   let cleanedExplanationHtml: string;
   if (question.explanation_redirect_url) {
-      cleanedExplanationHtml = `<p>This explanation is provided by GateOverflow. <a href="${question.explanation_redirect_url}" target="_blank" rel="noopener noreferrer" class="text-blue-500 hover:underline font-semibold inline-flex items-center gap-1">Click here to view the full discussion <ExternalLink class="w-4 h-4" /></a></p>`;
+    cleanedExplanationHtml = `<p>This explanation is provided by GateOverflow. <a href="${question.explanation_redirect_url}" target="_blank" rel="noopener noreferrer" class="text-blue-500 hover:underline font-semibold inline-flex items-center gap-1">Click here to view the full discussion <ExternalLink class="w-4 h-4" /></a></p>`;
   } else {
-      cleanedExplanationHtml = extractAndCleanHtml(question.explanation_html, 'mtq_explanation-text');
+    cleanedExplanationHtml = extractAndCleanHtml(question.explanation_html, 'mtq_explanation-text');
   }
   const primaryInfo = new Set([
-      question.subject?.toLowerCase(),
-      question.topic?.toLowerCase(),
-      `gate ${question.year}`.toLowerCase(),
-      question.year?.toLowerCase(),
-      (question as any).branch?.toLowerCase(),
+    question.subject?.toLowerCase(),
+    question.topic?.toLowerCase(),
+    `gate ${question.year}`.toLowerCase(),
+    question.year?.toLowerCase(),
+    (question as any).branch?.toLowerCase(),
   ]);
   const otherTags = (question.tags || []).filter(tag => tag && !primaryInfo.has(tag.toLowerCase()));
 
@@ -811,55 +811,54 @@ export function QuestionDetail() {
 
           <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden shadow-lg">
             <div className="p-6 border-b border-gray-200 dark:border-gray-800">
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-3 gap-4">
-                    <h1 className="text-xl md:text-2xl font-bold text-gray-900 dark:text-white flex-1">
-                      {question.title}
-                    </h1>
-                    <div className="flex items-center gap-2 sm:gap-4 flex-shrink-0 w-full sm:w-auto justify-end">
-                        <div className="flex items-center gap-1.5 text-gray-600 dark:text-gray-400 font-medium bg-gray-100 dark:bg-gray-800 px-2.5 py-1 rounded-lg">
-                            <TimerIcon className="w-4 h-4"/>
-                            <span className="text-sm tabular-nums">{formatTime(timeElapsed)}</span>
-                            <button
-                              onClick={() => setIsTimerOn(!isTimerOn)}
-                              disabled={submitted || !isAuthenticated}
-                              className="ml-1 p-1 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                              title={!isAuthenticated ? "Login to use timer" : (isTimerOn ? "Pause timer" : "Start timer")}
-                            >
-                              {isTimerOn ? <Pause className="w-3.5 h-3.5"/> : <Play className="w-3.5 h-3.5"/>}
-                            </button>
-                            <button
-                              onClick={handleResetTimer}
-                              disabled={submitted || !isAuthenticated || timeElapsed === 0}
-                              className="ml-0.5 p-1 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                              title={!isAuthenticated ? "Login to reset timer" : "Reset timer"}
-                            >
-                              <RotateCcw className="w-3.5 h-3.5" />
-                            </button>
-                        </div>
-                          <button
-                            onClick={handleToggleFavorite}
-                            disabled={!isAuthenticated}
-                            className={`flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg transition-colors border whitespace-nowrap ${
-                                isFavorite
-                                ? 'bg-yellow-100 text-yellow-800 border-yellow-200 dark:bg-yellow-900/50 dark:text-yellow-300 dark:border-yellow-700'
-                                : 'bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700 hover:bg-gray-200 dark:hover:bg-gray-700'
-                            } disabled:opacity-50 disabled:cursor-not-allowed`}
-                            title={!isAuthenticated ? "Login to add to Favorites" : (isFavorite ? "Remove from Favorites" : "Add to Favorites")}
-                          >
-                            <Bookmark className={`w-3.5 h-3.5 ${isFavorite ? 'fill-current' : ''}`}/>
-                            {isFavorite ? 'Favorited' : 'Favorite'}
-                          </button>
-                          <button
-                            onClick={() => setShowListModal(true)}
-                            disabled={!isAuthenticated}
-                            className="flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg transition-colors border bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700 hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                            title={!isAuthenticated ? "Login to save to lists" : "Save to list"}
-                          >
-                            <ListPlus className="w-3.5 h-3.5" />
-                            Save
-                          </button>
-                    </div>
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-3 gap-4">
+                <h1 className="text-xl md:text-2xl font-bold text-gray-900 dark:text-white flex-1">
+                  {question.title}
+                </h1>
+                <div className="flex items-center gap-2 sm:gap-4 flex-shrink-0 w-full sm:w-auto justify-end">
+                  <div className="flex items-center gap-1.5 text-gray-600 dark:text-gray-400 font-medium bg-gray-100 dark:bg-gray-800 px-2.5 py-1 rounded-lg">
+                    <TimerIcon className="w-4 h-4" />
+                    <span className="text-sm tabular-nums">{formatTime(timeElapsed)}</span>
+                    <button
+                      onClick={() => setIsTimerOn(!isTimerOn)}
+                      disabled={submitted || !isAuthenticated}
+                      className="ml-1 p-1 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                      title={!isAuthenticated ? "Login to use timer" : (isTimerOn ? "Pause timer" : "Start timer")}
+                    >
+                      {isTimerOn ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
+                    </button>
+                    <button
+                      onClick={handleResetTimer}
+                      disabled={submitted || !isAuthenticated || timeElapsed === 0}
+                      className="ml-0.5 p-1 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                      title={!isAuthenticated ? "Login to reset timer" : "Reset timer"}
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                  <button
+                    onClick={handleToggleFavorite}
+                    disabled={!isAuthenticated}
+                    className={`flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg transition-colors border whitespace-nowrap ${isFavorite
+                        ? 'bg-yellow-100 text-yellow-800 border-yellow-200 dark:bg-yellow-900/50 dark:text-yellow-300 dark:border-yellow-700'
+                        : 'bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700 hover:bg-gray-200 dark:hover:bg-gray-700'
+                      } disabled:opacity-50 disabled:cursor-not-allowed`}
+                    title={!isAuthenticated ? "Login to add to Favorites" : (isFavorite ? "Remove from Favorites" : "Add to Favorites")}
+                  >
+                    <Bookmark className={`w-3.5 h-3.5 ${isFavorite ? 'fill-current' : ''}`} />
+                    {isFavorite ? 'Favorited' : 'Favorite'}
+                  </button>
+                  <button
+                    onClick={() => setShowListModal(true)}
+                    disabled={!isAuthenticated}
+                    className="flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg transition-colors border bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700 hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title={!isAuthenticated ? "Login to save to lists" : "Save to list"}
+                  >
+                    <ListPlus className="w-3.5 h-3.5" />
+                    Save
+                  </button>
                 </div>
+              </div>
               <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-gray-600 dark:text-gray-400">
                 <span className={`flex items-center gap-1 px-2 py-0.5 rounded-full font-medium uppercase ${getQuestionTypeColor(question.question_type)}`}>
                   <ClipboardList className="w-3.5 h-3.5" /> {question.question_type || 'N/A'}
@@ -872,22 +871,22 @@ export function QuestionDetail() {
                 </span>
               </div>
               {otherTags.length > 0 && (
-                  <div className="mt-3 flex flex-wrap items-center gap-1.5">
-                      {otherTags.map(tag => (
-                          <span key={tag} className="px-2 py-0.5 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded text-xs">{tag}</span>
-                      ))}
-                  </div>
+                <div className="mt-3 flex flex-wrap items-center gap-1.5">
+                  {otherTags.map(tag => (
+                    <span key={tag} className="px-2 py-0.5 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded text-xs">{tag}</span>
+                  ))}
+                </div>
               )}
             </div>
 
             <div className="p-6">
               {/* --- LAYOUT FIX: Reduced mb-8 to mb-4 --- */}
-              <div 
-                ref={questionRef} 
+              <div
+                ref={questionRef}
                 className="text-gray-800 dark:text-gray-200 max-w-none mb-4 prose dark:prose-invert prose-sm md:prose-base"
-                dangerouslySetInnerHTML={{ __html: cleanedQuestionHtml }} 
+                dangerouslySetInnerHTML={{ __html: cleanedQuestionHtml }}
               />
-              
+
               {/* --- LAYOUT FIX: Reduced mb-8 to mb-6 --- */}
               {question.question_image_links && question.question_image_links.length > 0 && (
                 <div className="space-y-4 mb-6">
@@ -916,24 +915,24 @@ export function QuestionDetail() {
                       if (isAuthenticated) optionClasses += ' hover:border-blue-400 dark:hover:border-blue-600 cursor-pointer';
                       else optionClasses += ' cursor-default opacity-75';
                     } else {
-                        optionClasses += ' cursor-default ';
+                      optionClasses += ' cursor-default ';
                       if (isCorrectOption) {
                         optionClasses += 'border-green-500 bg-green-50 dark:bg-green-900/30';
                         stateIndicator = <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0 mt-1" />;
                       } else if (isSelected && !isCorrectOption) {
                         optionClasses += 'border-red-500 bg-red-50 dark:bg-red-900/30';
-                          stateIndicator = <XCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-1" />;
+                        stateIndicator = <XCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-1" />;
                       } else {
                         optionClasses += 'border-gray-200 dark:border-gray-700 opacity-60';
                       }
                     }
                     return (
                       <button key={option.label} ref={el => optionsRef.current[index] = el} onClick={() => handleMsqToggle(option.label)} disabled={submitted || !isAuthenticated} className={optionClasses} title={!isAuthenticated ? "Login to select an option" : ""}>
-                          <span className={`flex-shrink-0 w-7 h-7 rounded-md border-2 flex items-center justify-center font-semibold text-sm mt-0.5 ${ isSelected && !submitted ? 'bg-blue-500 border-blue-500 text-white' : submitted && isCorrectOption ? 'bg-green-500 border-green-500 text-white' : submitted && isSelected && !isCorrectOption ? 'bg-red-500 border-red-500 text-white' : 'bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300' }`}>
-                              {isSelected ? <CheckIcon className="w-4 h-4" /> : option.label}
-                          </span>
-                          <span className="flex-1 text-gray-900 dark:text-white prose dark:prose-invert prose-sm" dangerouslySetInnerHTML={{ __html: cleanedOptionHtml }} />
-                          {stateIndicator}
+                        <span className={`flex-shrink-0 w-7 h-7 rounded-md border-2 flex items-center justify-center font-semibold text-sm mt-0.5 ${isSelected && !submitted ? 'bg-blue-500 border-blue-500 text-white' : submitted && isCorrectOption ? 'bg-green-500 border-green-500 text-white' : submitted && isSelected && !isCorrectOption ? 'bg-red-500 border-red-500 text-white' : 'bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300'}`}>
+                          {isSelected ? <CheckIcon className="w-4 h-4" /> : option.label}
+                        </span>
+                        <span className="flex-1 text-gray-900 dark:text-white prose dark:prose-invert prose-sm" dangerouslySetInnerHTML={{ __html: cleanedOptionHtml }} />
+                        {stateIndicator}
                       </button>
                     );
                   })}
@@ -951,24 +950,24 @@ export function QuestionDetail() {
                       if (isAuthenticated) optionClasses += ' hover:border-blue-400 dark:hover:border-blue-600 cursor-pointer';
                       else optionClasses += ' cursor-default opacity-75';
                     } else {
-                        optionClasses += ' cursor-default ';
+                      optionClasses += ' cursor-default ';
                       if (isCorrectOption) {
                         optionClasses += 'border-green-500 bg-green-50 dark:bg-green-900/30';
                         stateIndicator = <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0 mt-1" />;
                       } else if (isSelected && !isCorrectOption) {
                         optionClasses += 'border-red-500 bg-red-50 dark:bg-red-900/30';
-                          stateIndicator = <XCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-1" />;
+                        stateIndicator = <XCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-1" />;
                       } else {
                         optionClasses += 'border-gray-200 dark:border-gray-700 opacity-60';
                       }
                     }
                     return (
                       <button key={option.label} ref={el => optionsRef.current[index] = el} onClick={() => handleMcqSelect(option.label)} disabled={submitted || !isAuthenticated} className={optionClasses} title={!isAuthenticated ? "Login to select an option" : ""}>
-                          <span className={`flex-shrink-0 w-7 h-7 rounded-full border-2 flex items-center justify-center font-semibold text-sm mt-0.5 ${ isSelected && !submitted ? 'bg-blue-500 border-blue-500 text-white' : submitted && isCorrectOption ? 'bg-green-500 border-green-500 text-white' : submitted && isSelected && !isCorrectOption ? 'bg-red-500 border-red-500 text-white' : 'bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300' }`}>
-                            {option.label}
-                          </span>
-                          <span className="flex-1 text-gray-900 dark:text-white prose dark:prose-invert prose-sm" dangerouslySetInnerHTML={{ __html: cleanedOptionHtml }} />
-                          {stateIndicator}
+                        <span className={`flex-shrink-0 w-7 h-7 rounded-full border-2 flex items-center justify-center font-semibold text-sm mt-0.5 ${isSelected && !submitted ? 'bg-blue-500 border-blue-500 text-white' : submitted && isCorrectOption ? 'bg-green-500 border-green-500 text-white' : submitted && isSelected && !isCorrectOption ? 'bg-red-500 border-red-500 text-white' : 'bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300'}`}>
+                          {option.label}
+                        </span>
+                        <span className="flex-1 text-gray-900 dark:text-white prose dark:prose-invert prose-sm" dangerouslySetInnerHTML={{ __html: cleanedOptionHtml }} />
+                        {stateIndicator}
                       </button>
                     );
                   })}
@@ -976,9 +975,9 @@ export function QuestionDetail() {
               )}
 
               {isAuthenticated && !submitted && (
-                <button 
-                  onClick={handleSubmit} 
-                  disabled={(!selectedOptions.length && (question.question_type === 'mcq' || question.question_type === 'msq')) || (question.question_type === 'nat' && !natAnswer) || loadingAuth} 
+                <button
+                  onClick={handleSubmit}
+                  disabled={(!selectedOptions.length && (question.question_type === 'mcq' || question.question_type === 'msq')) || (question.question_type === 'nat' && !natAnswer) || loadingAuth}
                   className="w-full py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 disabled:bg-gray-400 dark:disabled:bg-gray-700 disabled:cursor-not-allowed transition-colors"
                 >
                   Submit Answer
@@ -987,40 +986,40 @@ export function QuestionDetail() {
               {submitted && (
                 <div className="space-y-4">
                   <div className={`p-4 rounded-lg border ${isCorrect ? 'bg-green-50 dark:bg-green-950/50 border-green-200 dark:border-green-800' : 'bg-red-50 dark:bg-red-950/50 border-red-200 dark:border-red-800'}`}>
-                      <div className="flex items-center gap-3">
-                        {isCorrect ? <CheckCircle className="w-6 h-6 text-green-600" /> : <XCircle className="w-6 h-6 text-red-600" />}
-                        <span className={`font-semibold ${isCorrect ? 'text-green-800 dark:text-green-200' : 'text-red-800 dark:text-red-200'}`}>
-                          {isCorrect ? 'Correct!' : 'Incorrect.'}
-                          {question.question_type === 'nat' && !isCorrect && ` The correct answer is between ${question.nat_answer_min || 'N/A'} and ${question.nat_answer_max || 'N/A'}.`}
-                          {question.question_type === 'mcq' && !isCorrect && ` Correct option was ${question.options.find(o => o.is_correct)?.label}.`}
-                          {question.question_type === 'msq' && !isCorrect && ` Correct options were ${question.options.filter(o => o.is_correct).map(o => o.label).join(', ')}.`}
-                        </span>
-                      </div>
+                    <div className="flex items-center gap-3">
+                      {isCorrect ? <CheckCircle className="w-6 h-6 text-green-600" /> : <XCircle className="w-6 h-6 text-red-600" />}
+                      <span className={`font-semibold ${isCorrect ? 'text-green-800 dark:text-green-200' : 'text-red-800 dark:text-red-200'}`}>
+                        {isCorrect ? 'Correct!' : 'Incorrect.'}
+                        {question.question_type === 'nat' && !isCorrect && ` The correct answer is between ${question.nat_answer_min || 'N/A'} and ${question.nat_answer_max || 'N/A'}.`}
+                        {question.question_type === 'mcq' && !isCorrect && ` Correct option was ${question.options.find(o => o.is_correct)?.label}.`}
+                        {question.question_type === 'msq' && !isCorrect && ` Correct options were ${question.options.filter(o => o.is_correct).map(o => o.label).join(', ')}.`}
+                      </span>
+                    </div>
                   </div>
                   {(cleanedExplanationHtml || (question.explanation_image_links && question.explanation_image_links.length > 0)) && (
                     <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-6 border border-gray-200 dark:border-gray-700/50">
                       <h3 className="font-semibold text-gray-800 dark:text-gray-100 mb-3 text-lg">Explanation</h3>
-                      
-                      <div 
-                        ref={explanationRef} 
+
+                      <div
+                        ref={explanationRef}
                         className="max-w-none text-gray-700 dark:text-gray-300 text-sm prose dark:prose-invert prose-sm md:prose-base"
-                        dangerouslySetInnerHTML={{ __html: cleanedExplanationHtml }} 
+                        dangerouslySetInnerHTML={{ __html: cleanedExplanationHtml }}
                       />
-                      
+
                       {!question.explanation_redirect_url && question.explanation_image_links && question.explanation_image_links.length > 0 && (
-                          <div className="space-y-4 mt-4">
-                            {question.explanation_image_links.map((imgUrl, index) => (
-                                <img key={`e-img-${index}`} src={imgUrl} alt={`Explanation illustration ${index + 1}`} className="rounded-lg border dark:border-gray-700 max-w-full h-auto mx-auto" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}/>
-                            ))}
-                          </div>
+                        <div className="space-y-4 mt-4">
+                          {question.explanation_image_links.map((imgUrl, index) => (
+                            <img key={`e-img-${index}`} src={imgUrl} alt={`Explanation illustration ${index + 1}`} className="rounded-lg border dark:border-gray-700 max-w-full h-auto mx-auto" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                          ))}
+                        </div>
                       )}
                     </div>
                   )}
                   <div className="flex flex-col sm:flex-row gap-3">
-                      <button onClick={handleTryAgain} disabled={resetting} className="flex-1 py-3 bg-gray-200 text-gray-800 dark:bg-gray-700 dark:text-white rounded-lg font-semibold hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors flex items-center justify-center gap-2 disabled:opacity-50">
-                        {resetting ? <Loader2 className="w-5 h-5 animate-spin" /> : <RefreshCcw className="w-5 h-5" />}
-                        Try Again
-                      </button>
+                    <button onClick={handleTryAgain} disabled={resetting} className="flex-1 py-3 bg-gray-200 text-gray-800 dark:bg-gray-700 dark:text-white rounded-lg font-semibold hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors flex items-center justify-center gap-2 disabled:opacity-50">
+                      {resetting ? <Loader2 className="w-5 h-5 animate-spin" /> : <RefreshCcw className="w-5 h-5" />}
+                      Try Again
+                    </button>
                     <button onClick={handleNext} disabled={!findNextQuestionId()} className="flex-1 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors flex items-center justify-center gap-2 disabled:bg-gray-400 dark:disabled:bg-gray-700 disabled:cursor-not-allowed">
                       Next Question <ArrowRight className="w-5 h-5" />
                     </button>
@@ -1031,19 +1030,19 @@ export function QuestionDetail() {
 
             <div className="p-6 border-t border-gray-200 dark:border-gray-800">
               <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">My Notes</h3>
-              <textarea 
-                value={note} 
-                onChange={(e) => setNote(e.target.value)} 
-                disabled={!isAuthenticated} 
-                placeholder={isAuthenticated ? "Write a short note for this question..." : "Login to save notes."} 
+              <textarea
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                disabled={!isAuthenticated}
+                placeholder={isAuthenticated ? "Write a short note for this question..." : "Login to save notes."}
                 className="w-full p-3 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-white min-h-[100px] disabled:bg-gray-100 dark:disabled:bg-gray-800 disabled:cursor-not-allowed"
               />
-              <button 
-                onClick={handleSaveNote} 
-                disabled={!isAuthenticated || savingNote} 
+              <button
+                onClick={handleSaveNote}
+                disabled={!isAuthenticated || savingNote}
                 className="mt-3 w-full sm:w-auto px-6 py-2 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 disabled:bg-gray-400 dark:disabled:bg-gray-500 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
-                {savingNote ? <Loader2 className="w-5 h-5 animate-spin"/> : <Save className="w-5 h-5" />}
+                {savingNote ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
                 Save Note
               </button>
             </div>

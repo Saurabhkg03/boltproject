@@ -14,11 +14,10 @@ const BottomNavLink = ({ to, label, icon: Icon }: { to: string, label: string, i
     <Link
       to={to}
       // --- FIX: Make smaller (h-14) ---
-      className={`flex flex-col items-center justify-center gap-0.5 w-full h-14 transition-colors ${
-        isActive
+      className={`flex flex-col items-center justify-center gap-0.5 w-full h-14 transition-colors ${isActive
           ? 'text-blue-600 dark:text-blue-400'
-          : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-      }`}
+          : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
+        }`}
     >
       <Icon className={`w-6 h-6 ${isActive ? 'fill-current' : ''}`} strokeWidth={isActive ? 2.5 : 2} />
       <span className="text-xs font-medium">{label}</span>
@@ -28,7 +27,7 @@ const BottomNavLink = ({ to, label, icon: Icon }: { to: string, label: string, i
 
 export function BottomNavbar() {
   const { userInfo, isAuthenticated } = useAuth();
-  
+
   // Determine profile link
   const profileLink = isAuthenticated && userInfo?.username
     ? `/profile/${userInfo.username}`
@@ -36,7 +35,7 @@ export function BottomNavbar() {
 
   return (
     // --- UPDATED: Show only on mobile (md:hidden), make opaque, make smaller (h-14) ---
-    <nav className="fixed bottom-0 left-0 right-0 z-40 h-14 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 md:hidden">
+    <nav className="fixed bottom-0 left-0 right-0 z-40 h-14 bg-white dark:bg-zinc-900 border-t border-zinc-200 dark:border-zinc-800 md:hidden">
       <div className="max-w-7xl mx-auto px-2 sm:px-6 lg:px-8 h-full">
         <div className="flex justify-around items-center h-full">
           <BottomNavLink to="/" label="Home" icon={Home} />

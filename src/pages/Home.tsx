@@ -40,7 +40,7 @@ export function Home() {
   // --- UPDATED: Get branch-aware metadata ---
   const { metadata, loading: metadataLoading, availableBranches, selectedBranch, questionCollectionPath } = useMetadata();
   const { dailyChallengeId, loadingChallenge } = useDailyChallenge();
-  
+
   const [dailyChallenge, setDailyChallenge] = useState<Question | null>(null);
   const [leaderboardPreview, setLeaderboardPreview] = useState<User[]>([]);
   const [loadingLeaderboard, setLoadingLeaderboard] = useState(true);
@@ -71,24 +71,24 @@ export function Home() {
       try {
         // --- NEW: Sort by the branch-specific rating ---
         const usersQuery = query(
-          collection(db, 'users'), 
-          orderBy(`ratings.${selectedBranch}`, 'desc'), 
+          collection(db, 'users'),
+          orderBy(`ratings.${selectedBranch}`, 'desc'),
           limit(5)
         );
         const usersSnapshot = await getDocs(usersQuery);
-        
-        const fetchedUsers = usersSnapshot.docs.map(doc => {
-            const data = doc.data() as User;
-            // --- NEW: Use branch-specific stats ---
-            const branchStats = data.branchStats?.[selectedBranch] || { attempted: 0, correct: 0, accuracy: 0, subjects: {} };
-            const branchRating = data.ratings?.[selectedBranch] || 0;
 
-            // Return a "partial" user object shaped for the leaderboard
-            return {
-              ...data,
-              stats: branchStats, // Overwrite old stats with branch-specific
-              rating: branchRating, // Overwrite old rating with branch-specific
-            };
+        const fetchedUsers = usersSnapshot.docs.map(doc => {
+          const data = doc.data() as User;
+          // --- NEW: Use branch-specific stats ---
+          const branchStats = data.branchStats?.[selectedBranch] || { attempted: 0, correct: 0, accuracy: 0, subjects: {} };
+          const branchRating = data.ratings?.[selectedBranch] || 0;
+
+          // Return a "partial" user object shaped for the leaderboard
+          return {
+            ...data,
+            stats: branchStats, // Overwrite old stats with branch-specific
+            rating: branchRating, // Overwrite old rating with branch-specific
+          };
         });
 
         setLeaderboardPreview(fetchedUsers);
@@ -136,7 +136,7 @@ export function Home() {
   if (authLoading || metadataLoading || loadingChallenge) {
     return <HomeSkeleton />;
   }
-  
+
   const branchName = availableBranches[selectedBranch] || 'Preparation';
 
   // --- NEW: Get branch-specific rating for welcome message ---
@@ -146,22 +146,22 @@ export function Home() {
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 md:py-20">
       {/* Header Section */}
       <div className="text-center mb-16">
-        <h1 className="text-4xl md:text-6xl font-extrabold text-slate-900 dark:text-white mb-4 tracking-tight">
+        <h1 className="text-4xl md:text-6xl font-extrabold text-zinc-900 dark:text-white mb-4 tracking-tight">
           Practice. Analyze. <span className="text-blue-500">Master GATE.</span>
         </h1>
-        <p className="text-lg md:text-xl text-slate-600 dark:text-slate-400 max-w-3xl mx-auto">
+        <p className="text-lg md:text-xl text-zinc-600 dark:text-zinc-400 max-w-3xl mx-auto">
           {/* UPDATED: Dynamic text */}
           Your complete platform for GATE {branchName} preparation, with curated questions, performance tracking, and community leaderboards.
         </p>
         {/* Welcome Message */}
         {isAuthenticated && userInfo && (
           <div className="mt-8 inline-block glass-card p-4">
-            <p className="text-lg text-slate-700 dark:text-slate-300">
+            <p className="text-lg text-zinc-700 dark:text-zinc-300">
               Welcome back, <span className="font-semibold text-blue-600 dark:text-blue-300">{userInfo.name}</span>!
             </p>
-            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-                {/* --- NEW: Show branch-specific rating --- */}
-                Current Rating ({branchName}): <span className="font-semibold text-blue-600 dark:text-blue-400">{userBranchRating}</span>
+            <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1">
+              {/* --- NEW: Show branch-specific rating --- */}
+              Current Rating ({branchName}): <span className="font-semibold text-blue-600 dark:text-blue-400">{userBranchRating}</span>
             </p>
           </div>
         )}
@@ -171,22 +171,22 @@ export function Home() {
       {isAuthenticated && dailyChallenge && (
         <div className="mb-16 glass-card p-6 md:p-8 border-blue-500/20">
           <div className="flex flex-col md:flex-row items-center gap-4 md:gap-8">
-              <div className="flex-shrink-0 w-16 h-16 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-2xl flex items-center justify-center shadow-lg">
-                <Zap className="w-8 h-8 text-white" />
-              </div>
-              <div className="flex-1 text-center md:text-left">
-                <h2 className="text-2xl font-bold text-slate-800 dark:text-white">Daily Challenge ({branchName})</h2>
-                <p className="text-slate-600 dark:text-slate-300 mt-1">
-                  "{dailyChallenge.title}" from {dailyChallenge.subject}. Give it a shot!
-                </p>
-              </div>
-              <Link
-                to={`/question/${dailyChallenge.id}`}
-                className="inline-flex items-center gap-2 bg-slate-800 text-white px-6 py-3 rounded-full font-semibold hover:bg-slate-900 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200 transition-colors shadow-md hover:shadow-lg transform hover:-translate-y-0.5"
-              >
-                Start Now
-                <ArrowRight className="w-5 h-5" />
-              </Link>
+            <div className="flex-shrink-0 w-16 h-16 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-2xl flex items-center justify-center shadow-lg">
+              <Zap className="w-8 h-8 text-white" />
+            </div>
+            <div className="flex-1 text-center md:text-left">
+              <h2 className="text-2xl font-bold text-zinc-800 dark:text-white">Daily Challenge ({branchName})</h2>
+              <p className="text-zinc-600 dark:text-zinc-300 mt-1">
+                "{dailyChallenge.title}" from {dailyChallenge.subject}. Give it a shot!
+              </p>
+            </div>
+            <Link
+              to={`/question/${dailyChallenge.id}`}
+              className="inline-flex items-center gap-2 bg-zinc-800 text-white px-6 py-3 rounded-full font-semibold hover:bg-zinc-900 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200 transition-colors shadow-md hover:shadow-lg transform hover:-translate-y-0.5"
+            >
+              Start Now
+              <ArrowRight className="w-5 h-5" />
+            </Link>
           </div>
         </div>
       )}
@@ -195,7 +195,7 @@ export function Home() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-16">
         {/* Subjects Section */}
         <div className="lg:col-span-2">
-          <h2 className="text-3xl font-bold text-slate-900 dark:text-white mb-6">
+          <h2 className="text-3xl font-bold text-zinc-900 dark:text-white mb-6">
             Subjects Overview ({branchName})
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -204,11 +204,10 @@ export function Home() {
                 key={subject.name}
                 to="/practice"
                 state={{ subject: subject.name }} // Pass subject to Practice page
-                className={`glass-card p-6 transition-all duration-300 group ${
-                  subject.count > 0
+                className={`glass-card p-6 transition-all duration-300 group ${subject.count > 0
                     ? 'hover:shadow-xl hover:-translate-y-1'
                     : 'opacity-60 cursor-not-allowed'
-                }`}
+                  }`}
                 onClick={(e) => { if (subject.count === 0) e.preventDefault(); }}
               >
                 <div className="flex items-center gap-4">
@@ -216,22 +215,22 @@ export function Home() {
                     <BookOpen className="w-6 h-6 text-white" />
                   </div>
                   <div className="flex-1">
-                    <h3 className="font-semibold text-lg text-slate-800 dark:text-white">
+                    <h3 className="font-semibold text-lg text-zinc-800 dark:text-white">
                       {subject.name}
                     </h3>
-                    <p className="text-sm text-slate-600 dark:text-slate-400">
+                    <p className="text-sm text-zinc-600 dark:text-zinc-400">
                       {subject.count} questions
                     </p>
                   </div>
                   {subject.count > 0 && (
-                    <ArrowRight className="w-5 h-5 text-slate-400 dark:text-slate-500 group-hover:text-blue-500 group-hover:translate-x-1 transition-all" />
+                    <ArrowRight className="w-5 h-5 text-zinc-400 dark:text-zinc-500 group-hover:text-blue-500 group-hover:translate-x-1 transition-all" />
                   )}
                 </div>
               </Link>
             ))}
             {/* Placeholder if no subjects */}
             {subjectStats.length === 0 && (
-              <p className="md:col-span-2 text-center text-slate-500 dark:text-slate-400 py-6">
+              <p className="md:col-span-2 text-center text-zinc-500 dark:text-zinc-400 py-6">
                 No subjects found for this branch.
               </p>
             )}
@@ -241,7 +240,7 @@ export function Home() {
         {/* Leaderboard Preview Section */}
         <div className="glass-card p-6">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-2xl font-bold text-slate-900 dark:text-white">
+            <h2 className="text-2xl font-bold text-zinc-900 dark:text-white">
               Top Performers ({branchName})
             </h2>
             <Link to="/leaderboard" className="text-sm font-medium text-blue-600 dark:text-blue-400 hover:underline">
@@ -253,32 +252,31 @@ export function Home() {
               // Simple skeleton for leaderboard
               Array.from({ length: 5 }).map((_, index) => (
                 <div key={index} className="flex items-center gap-4 animate-pulse">
-                  <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-700"></div>
-                  <div className="w-10 h-10 rounded-full bg-slate-200 dark:bg-slate-700"></div>
+                  <div className="w-8 h-8 rounded-full bg-zinc-200 dark:bg-zinc-700"></div>
+                  <div className="w-10 h-10 rounded-full bg-zinc-200 dark:bg-zinc-700"></div>
                   <div className="flex-1 space-y-2">
-                    <div className="h-4 rounded bg-slate-200 dark:bg-slate-700 w-3/4"></div>
-                    <div className="h-3 rounded bg-slate-200 dark:bg-slate-700 w-1/2"></div>
+                    <div className="h-4 rounded bg-zinc-200 dark:bg-zinc-700 w-3/4"></div>
+                    <div className="h-3 rounded bg-zinc-200 dark:bg-zinc-700 w-1/2"></div>
                   </div>
-                  <div className="h-4 rounded bg-slate-200 dark:bg-slate-700 w-1/4"></div>
+                  <div className="h-4 rounded bg-zinc-200 dark:bg-zinc-700 w-1/4"></div>
                 </div>
               ))
             ) : leaderboardPreview.length === 0 ? (
-              <p className="p-4 text-center text-slate-500 dark:text-slate-400">No users yet.</p>
+              <p className="p-4 text-center text-zinc-500 dark:text-zinc-400">No users yet.</p>
             ) : (
               leaderboardPreview.map((leader, index) => (
                 <div key={leader.uid} className="flex items-center gap-4">
-                  <div className={`w-8 h-8 flex items-center justify-center rounded-full font-bold text-sm ${
-                    index === 0 ? 'bg-yellow-400 text-white' :
-                    index === 1 ? 'bg-slate-400 text-white' :
-                    index === 2 ? 'bg-orange-500 text-white' :
-                    'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
-                  }`}>
+                  <div className={`w-8 h-8 flex items-center justify-center rounded-full font-bold text-sm ${index === 0 ? 'bg-yellow-400 text-white' :
+                      index === 1 ? 'bg-zinc-400 text-white' :
+                        index === 2 ? 'bg-orange-500 text-white' :
+                          'bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300'
+                    }`}>
                     {index + 1}
                   </div>
-                  <img src={leader.avatar || '/user.png'} alt={leader.name} className="w-10 h-10 rounded-full object-cover border dark:border-slate-700" onError={(e) => { (e.target as HTMLImageElement).src = '/user.png'; }}/>
+                  <img src={leader.avatar || '/user.png'} alt={leader.name} className="w-10 h-10 rounded-full object-cover border dark:border-zinc-700" onError={(e) => { (e.target as HTMLImageElement).src = '/user.png'; }} />
                   <div className="flex-1 min-w-0">
-                    <p className="font-medium text-slate-800 dark:text-white truncate">{leader.name}</p>
-                    <p className="text-sm text-slate-500 dark:text-slate-400">
+                    <p className="font-medium text-zinc-800 dark:text-white truncate">{leader.name}</p>
+                    <p className="text-sm text-zinc-500 dark:text-zinc-400">
                       {/* --- FIXED: Added optional chaining --- */}
                       {leader.stats?.correct ?? 0} solved
                     </p>
@@ -298,20 +296,20 @@ export function Home() {
       {/* Call to Action (if not logged in) */}
       {!isAuthenticated && (
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-12 md:pb-20">
-            <div className="glass-card p-8 text-center">
-                <h3 className="text-2xl font-bold text-slate-800 dark:text-white mb-2">
-                Ready to start?
-                </h3>
-                <p className="text-slate-600 dark:text-slate-400 mb-6">
-                Create an account or log in to track your progress.
-                </p>
-                <Link
-                to="/login"
-                className="inline-flex items-center gap-2 bg-blue-600 text-white px-8 py-3 rounded-full font-semibold hover:bg-blue-700 transition-colors shadow-md hover:shadow-lg transform hover:-translate-y-0.5"
-                >
-                Get Started <ArrowRight className="w-5 h-5" />
-                </Link>
-            </div>
+          <div className="glass-card p-8 text-center">
+            <h3 className="text-2xl font-bold text-zinc-800 dark:text-white mb-2">
+              Ready to start?
+            </h3>
+            <p className="text-zinc-600 dark:text-zinc-400 mb-6">
+              Create an account or log in to track your progress.
+            </p>
+            <Link
+              to="/login"
+              className="inline-flex items-center gap-2 bg-blue-600 text-white px-8 py-3 rounded-full font-semibold hover:bg-blue-700 transition-colors shadow-md hover:shadow-lg transform hover:-translate-y-0.5"
+            >
+              Get Started <ArrowRight className="w-5 h-5" />
+            </Link>
+          </div>
         </div>
       )}
     </div>

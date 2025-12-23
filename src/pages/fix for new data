@@ -1,0 +1,85 @@
+Based on the `QuestionDetail` code you provided and the new JSON output from Gemini, **yes, it should load correctly, but with one minor caveat regarding styling.**
+
+Here is the detailed breakdown of why it will work and what you might want to double-check:
+
+### Why it will mostly work out of the box:
+
+1.  **LaTeX Support is Already There:**
+    Your `QuestionDetail` component already has a robust `renderKatex` function that includes the standard LaTeX delimiters Gemini is now using:
+
+    ```javascript
+    // From your QuestionDetail code:
+    delimiters: [
+       { left: '[latex]', right: '[/latex]', display: true },
+       { left: '$$', right: '$$', display: true }, // <-- Matches Gemini's new block math
+       { left: '$', right: '$', display: false },   // <-- Matches Gemini's new inline math
+       // ...
+    ],
+    ```
+
+2.  **HTML Rendering:**
+    You are using `dangerouslySetInnerHTML` to render the explanation, which will correctly interpret the `<h3>`, `<p>`, and `<ul>` tags Gemini now generates.
+
+3.  **Tailwind Typography (`prose`):**
+    You are using the `prose` class in your container:
+
+    ```javascript
+    <div 
+      ref={explanationRef} 
+      className="max-w-none text-gray-700 dark:text-gray-300 text-sm prose dark:prose-invert prose-sm md:prose-base"
+      dangerouslySetInnerHTML={{ __html: cleanedExplanationHtml }} 
+    />
+    ```
+
+    The `@tailwindcss/typography` plugin (which provides the `prose` class) automatically styles raw HTML tags like headings and lists nicely. This is perfect for the new Gemini output.
+
+### The Minor Caveat (The Wrapper Div)
+
+Your utility function `extractAndCleanHtml` looks for a specific class to extract content:
+
+```javascript
+cleanedExplanationHtml = extractAndCleanHtml(question.explanation_html, 'mtq_explanation-text');
+```
+
+And the regex in that function is:
+
+```javascript
+const regex = new RegExp(`<div[^>]*class=["'][^"']*${contentClass}[^"']*["'][^>]*>([\\s\\S]*?)<\/div>`, 'i');
+```
+
+  * **Gemini Output:** `<div class="mtq_explanation-text space-y-3">...content...</div>`
+  * **Result:** Your regex **WILL** correctly match this because `mtq_explanation-text` is present in the class string.
+  * **Effect:** It will extract *only* the inner content, effectively stripping away the `<div class="mtq_explanation-text space-y-3">` wrapper.
+  * **Is this bad?** Not really. You lose the `space-y-3` (vertical spacing) utility class from Gemini, **BUT** because you are using `prose` on the parent container, Tailwind will automatically add nice spacing between the `<h3>`, `<p>`, and `<ul>` elements anyway.
+
+### Recommended Small Tweak (Optional)
+
+If you want to be 100% sure the LaTeX renders reliably when switching between questions, I recommend a slight update to your `useEffect` that handles KaTeX to ensure it re-runs securely when the explanation HTML changes.
+
+In your `QuestionDetail` component, make sure `cleanedExplanationHtml` is in the dependency array of the effect that triggers standard `renderMathInElement`:
+
+```javascript
+// In QuestionDetail component
+
+// ... existing cleanedExplanationHtml definition ...
+
+useEffect(() => {
+    const renderKatex = () => {
+        if (loadingData || !question || typeof window.renderMathInElement !== 'function') return;
+        // ... existing renderOptions ...
+
+        // ... existing render calls for questionRef ...
+
+        // Ensure explanation is rendered when it exists
+        if (explanationRef.current) {
+             window.renderMathInElement(explanationRef.current, renderOptions);
+        }
+        
+        // ... existing options render calls ...
+    };
+
+    // ... existing interval check logic ...
+
+// ADD cleanedExplanationHtml to the dependency array here so it re-renders if the HTML string changes
+}, [question, loadingData, submitted, cleanedExplanationHtml]); 
+```
