@@ -1,13 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, CheckCircle, XCircle, Loader2, BookOpen, Bookmark, Calendar, RefreshCcw, Save, Timer as TimerIcon, Play, Pause, LogIn, Check as CheckIcon, X as XIcon, FolderPlus, ListPlus, RotateCcw, ClipboardList, ExternalLink } from 'lucide-react';
+import { ArrowLeft, ArrowRight, CheckCircle, XCircle, Loader2, BookOpen, Bookmark, Calendar, RefreshCcw, Save, Timer as TimerIcon, Play, Pause, LogIn, Check as CheckIcon, X as XIcon, FolderPlus, ListPlus, RotateCcw, ClipboardList } from 'lucide-react';
 
 import { doc, getDoc, setDoc, collection, getDocs, arrayUnion, arrayRemove, query, serverTimestamp, writeBatch, orderBy, addDoc } from 'firebase/firestore';
-// --- FIX: Add .ts/.tsx extensions to imports ---
-import { db } from '../firebase.ts';
-import { useAuth } from '../contexts/AuthContext.tsx';
-import { Question, Submission, UserQuestionData, QuestionList, UserStats, UserStreakData } from '../data/mockData.ts';
-import { useMetadata } from '../contexts/MetadataContext.tsx';
+import { db } from '../firebase';
+import { useAuth } from '../contexts/AuthContext';
+import { Question, Submission, UserQuestionData, QuestionList, UserStats, UserStreakData, User } from '../data/mockData';
+import { useMetadata } from '../contexts/MetadataContext';
 
 declare global {
   interface Window {
@@ -52,14 +51,14 @@ const extractAndCleanHtml = (html: string, contentClass?: string): string => {
   // and replace PLACEHOLDER_SRC with REAL_SRC
   clean = clean.replace(
     /(<img[^>]*?data-src=(["']))(.*?)\2([^>]*?src=(["']))(.*?)\5/gi,
-    (match, part1, quote, dataSrcValue, part2, part3, oldSrcValue) => {
+    (_match, part1, quote, dataSrcValue, part2, _part3, _oldSrcValue) => {
       // Reconstruct the img tag, replacing the value of src with the value of data-src
-      return `${part1}${dataSrcValue}${quote}${part2}${part3}${dataSrcValue}${quote}`;
+      return `${part1}${dataSrcValue}${quote}${part2}${dataSrcValue}${quote}`;
     }
   );
 
   // 3. Remove the 'lazyload' class to prevent any JS from hiding it
-  clean = clean.replace(/class=(["'])(.*?)(lazyload)(.*?)(\1)/gi, (match, quote, before, lazyload, after) => {
+  clean = clean.replace(/class=(["'])(.*?)(lazyload)(.*?)(\1)/gi, (_match, quote, before, _lazyload, after) => {
     const newClasses = (before + after).trim().replace(/\s{2,}/g, ' '); // remove lazyload and extra spaces
     if (newClasses) {
       return `class=${quote}${newClasses}${quote}`;
@@ -559,7 +558,7 @@ export function QuestionDetail() {
       await batch.commit();
       console.log(`Successfully submitted and updated user stats for branch: ${selectedBranch}`);
 
-      setUserInfo(prev => {
+      setUserInfo((prev: User | null) => {
         if (!prev) return null;
 
         const newBranchStatsMap = { ...prev.branchStats, [selectedBranch]: newBranchStats };
@@ -620,7 +619,7 @@ export function QuestionDetail() {
       await batch.commit();
       console.log(`Successfully reset submission and updated user stats for branch: ${selectedBranch}`);
 
-      setUserInfo(prev => {
+      setUserInfo((prev: User | null) => {
         if (!prev) return null;
 
         const newBranchStatsMap = { ...prev.branchStats, [selectedBranch]: newBranchStats };
@@ -768,7 +767,7 @@ export function QuestionDetail() {
   const cleanedQuestionHtml = extractAndCleanHtml(question.question_html, 'question_text');
   let cleanedExplanationHtml: string;
   if (question.explanation_redirect_url) {
-    cleanedExplanationHtml = `<p>This explanation is provided by GateOverflow. <a href="${question.explanation_redirect_url}" target="_blank" rel="noopener noreferrer" class="text-blue-500 hover:underline font-semibold inline-flex items-center gap-1">Click here to view the full discussion <ExternalLink class="w-4 h-4" /></a></p>`;
+    cleanedExplanationHtml = `<p>This explanation is provided by GateOverflow. <a href="${question.explanation_redirect_url}" target="_blank" rel="noopener noreferrer" class="text-blue-500 hover:underline font-semibold inline-flex items-center gap-1">Click here to view the full discussion</a></p>`;
   } else {
     cleanedExplanationHtml = extractAndCleanHtml(question.explanation_html, 'mtq_explanation-text');
   }
@@ -840,8 +839,8 @@ export function QuestionDetail() {
                     onClick={handleToggleFavorite}
                     disabled={!isAuthenticated}
                     className={`flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg transition-colors border whitespace-nowrap ${isFavorite
-                        ? 'bg-yellow-100 text-yellow-800 border-yellow-200 dark:bg-yellow-900/50 dark:text-yellow-300 dark:border-yellow-700'
-                        : 'bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700 hover:bg-gray-200 dark:hover:bg-gray-700'
+                      ? 'bg-yellow-100 text-yellow-800 border-yellow-200 dark:bg-yellow-900/50 dark:text-yellow-300 dark:border-yellow-700'
+                      : 'bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700 hover:bg-gray-200 dark:hover:bg-gray-700'
                       } disabled:opacity-50 disabled:cursor-not-allowed`}
                     title={!isAuthenticated ? "Login to add to Favorites" : (isFavorite ? "Remove from Favorites" : "Add to Favorites")}
                   >

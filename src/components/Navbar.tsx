@@ -4,7 +4,7 @@ import { Moon, Sun, LogOut, User, Shield, Settings, ChevronDown, Flame, BookCopy
 import { motion } from 'framer-motion';
 
 import { useTheme } from '../contexts/ThemeContext';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { useDailyChallenge } from '../contexts/DailyChallengeContext';
 import { useMetadata } from '../contexts/MetadataContext';
 import { cn } from '@/lib/utils'; // Updated import
@@ -162,43 +162,43 @@ export function Navbar() {
                     />
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-56">
-                  <DropdownMenuLabel className="font-normal">
+                <DropdownMenuContent align="end" className="w-64 p-2 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-xl border border-zinc-200/50 dark:border-zinc-800/50 shadow-2xl rounded-2xl animate-in fade-in zoom-in-95 duration-200">
+                  <DropdownMenuLabel className="font-normal p-3 bg-zinc-100/50 dark:bg-zinc-800/50 rounded-xl mb-2">
                     <div className="flex flex-col space-y-1">
-                      <p className="text-sm font-medium leading-none">{userInfo.name}</p>
-                      <p className="text-xs leading-none text-muted-foreground">{userInfo.username ? `@${userInfo.username}` : ''}</p>
+                      <p className="text-sm font-bold leading-none text-zinc-900 dark:text-zinc-100">{userInfo.name}</p>
+                      <p className="text-xs leading-none text-zinc-500 dark:text-zinc-400 font-medium">@{userInfo.username}</p>
                     </div>
                   </DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem asChild>
+                  {/* <DropdownMenuSeparator className="bg-zinc-200/50 dark:bg-zinc-800/50 mb-1" /> */}
+                  <DropdownMenuItem asChild className="rounded-lg focus:bg-blue-50 dark:focus:bg-blue-900/20 focus:text-blue-600 dark:focus:text-blue-400 cursor-pointer p-2.5 transition-colors">
                     <Link to={userInfo.username ? `/profile/${userInfo.username}` : '#'} className="cursor-pointer">
-                      <User className="mr-2 h-4 w-4" />
-                      <span>Profile</span>
+                      <User className="mr-2.5 h-4 w-4" />
+                      <span className="font-medium">Profile</span>
                     </Link>
                   </DropdownMenuItem>
-                  <DropdownMenuItem asChild>
+                  <DropdownMenuItem asChild className="rounded-lg focus:bg-zinc-100 dark:focus:bg-zinc-800 cursor-pointer p-2.5 transition-colors">
                     <Link to="/settings" className="cursor-pointer">
-                      <Settings className="mr-2 h-4 w-4" />
-                      <span>Settings</span>
+                      <Settings className="mr-2.5 h-4 w-4" />
+                      <span className="font-medium">Settings</span>
                     </Link>
                   </DropdownMenuItem>
                   {(userInfo?.role === 'admin' || userInfo?.role === 'moderator') && (
-                    <DropdownMenuItem asChild className="md:hidden">
+                    <DropdownMenuItem asChild className="md:hidden rounded-lg focus:bg-zinc-100 dark:focus:bg-zinc-800 cursor-pointer p-2.5 transition-colors">
                       <Link to="/admin" className="cursor-pointer">
-                        <Shield className="mr-2 h-4 w-4" />
-                        <span>Admin Panel</span>
+                        <Shield className="mr-2.5 h-4 w-4" />
+                        <span className="font-medium">Admin Panel</span>
                       </Link>
                     </DropdownMenuItem>
                   )}
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={toggleTheme} className="cursor-pointer">
-                    {theme === 'light' ? <Moon className="mr-2 h-4 w-4" /> : <Sun className="mr-2 h-4 w-4" />}
-                    <span>{theme === 'light' ? 'Dark Mode' : 'Light Mode'}</span>
+                  <DropdownMenuSeparator className="bg-zinc-200/50 dark:bg-zinc-800/50 my-1" />
+                  <DropdownMenuItem onClick={toggleTheme} className="rounded-lg focus:bg-zinc-100 dark:focus:bg-zinc-800 cursor-pointer p-2.5 transition-colors">
+                    {theme === 'light' ? <Moon className="mr-2.5 h-4 w-4" /> : <Sun className="mr-2.5 h-4 w-4" />}
+                    <span className="font-medium">{theme === 'light' ? 'Dark Mode' : 'Light Mode'}</span>
                   </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={logout} className="text-red-600 dark:text-red-400 cursor-pointer focus:text-red-600 focus:bg-red-50 dark:focus:bg-red-950/50">
-                    <LogOut className="mr-2 h-4 w-4" />
-                    <span>Log out</span>
+                  <DropdownMenuSeparator className="bg-zinc-200/50 dark:bg-zinc-800/50 my-1" />
+                  <DropdownMenuItem onClick={logout} className="rounded-lg text-red-600 dark:text-red-400 focus:text-red-700 focus:bg-red-50 dark:focus:bg-red-950/30 cursor-pointer p-2.5 transition-colors">
+                    <LogOut className="mr-2.5 h-4 w-4" />
+                    <span className="font-medium">Log out</span>
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>

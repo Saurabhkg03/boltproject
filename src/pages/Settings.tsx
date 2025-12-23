@@ -1,248 +1,237 @@
-import { useState, useEffect } from 'react';
-import { useAuth } from '../contexts/AuthContext';
+import { useState, useRef, useEffect } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
+import { ArrowLeft, Save, Trash2, Camera, AlertTriangle, Loader2 } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
+import { updateProfile } from 'firebase/auth';
+import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase';
-import { doc, updateDoc, collection, query, where, getDocs } from 'firebase/firestore';
-import { getAuth, updateProfile } from 'firebase/auth';
-import { Loader2, Save, ArrowLeft } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 export function Settings() {
-  const { user, userInfo, setUserInfo, deleteAccount } = useAuth();
-  const navigate = useNavigate();
+    const navigate = useNavigate();
+    const { user, userInfo, setUserInfo, deleteAccount } = useAuth();
 
-  const [displayName, setDisplayName] = useState('');
-  const [username, setUsername] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [usernameAvailable, setUsernameAvailable] = useState(true);
-  const [usernameLoading, setUsernameLoading] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
+    const [displayName, setDisplayName] = useState(userInfo?.name || '');
+    const [username, setUsername] = useState(userInfo?.username || '');
+    const [loading, setLoading] = useState(false);
+    const [uploadingPhoto, setUploadingPhoto] = useState(false);
+    const [error, setError] = useState('');
+    const [success, setSuccess] = useState('');
+    const [deleting, setDeleting] = useState(false);
 
-  const needsSetup = userInfo?.needsSetup;
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    if (userInfo) {
-      setDisplayName(userInfo.name || '');
-      setUsername(userInfo.username || '');
-    }
-  }, [userInfo]);
+    useEffect(() => {
+        if (userInfo) {
+            setDisplayName(userInfo.name);
+            setUsername(userInfo.username);
+        }
+    }, [userInfo]);
 
-  // Debounced username check
-  useEffect(() => {
-    const checkUsername = async () => {
-        if (!username || (userInfo && username === userInfo.username)) {
-            setUsernameAvailable(true);
+    const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file || !user) return;
+
+        if (file.size > 2 * 1024 * 1024) {
+            setError('File size must be less than 2MB');
             return;
         }
-        setUsernameLoading(true);
-        const saneUsername = username.toLowerCase().replace(/[^a-z0-9_]/g, '');
-        if (saneUsername.length < 3) {
-            setUsernameAvailable(false);
-            setUsernameLoading(false);
-            return
+
+        setUploadingPhoto(true);
+        setError('');
+
+        try {
+            const storage = getStorage();
+            const storageRef = ref(storage, `avatars/${user.uid}`);
+            await uploadBytes(storageRef, file);
+            const photoURL = await getDownloadURL(storageRef);
+
+            await updateProfile(user, { photoURL });
+            await updateDoc(doc(db, 'users', user.uid), { avatar: photoURL });
+
+            setUserInfo(prev => prev ? { ...prev, avatar: photoURL } : null);
+            setSuccess('Profile photo updated!');
+        } catch (err) {
+            console.error(err);
+            setError('Failed to upload photo');
+        } finally {
+            setUploadingPhoto(false);
         }
-        const usersRef = collection(db, 'users');
-        const q = query(usersRef, where('username', '==', saneUsername));
-        const querySnapshot = await getDocs(q);
-        setUsernameAvailable(querySnapshot.empty);
-        setUsernameLoading(false);
     };
 
-    const handler = setTimeout(() => {
-        checkUsername();
-    }, 500);
+    const handleSave = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!user || !displayName.trim()) return;
 
-    return () => {
-        clearTimeout(handler);
-    };
-  }, [username, userInfo?.username]);
+        setLoading(true);
+        setError('');
+        setSuccess('');
 
-  const handleSave = async () => {
-    if (!user || !userInfo) return;
-     if (!usernameAvailable || username.length < 3) {
-        setError("Username is not available or is too short (min 3 chars, letters, numbers, _).");
-        return;
-    }
-
-    setLoading(true);
-    setError('');
-    setSuccess('');
-
-    try {
-      const saneUsername = username.toLowerCase().replace(/[^a-z0-9_]/g, '');
-
-      const userDocRef = doc(db, 'users', user.uid);
-      await updateDoc(userDocRef, {
-        name: displayName,
-        username: saneUsername,
-        needsSetup: false,
-      });
-
-      const auth = getAuth();
-      if (auth.currentUser) {
-        await updateProfile(auth.currentUser, {
-          displayName: displayName,
-        });
-      }
-
-      if (setUserInfo) {
-        setUserInfo(prev => prev ? { ...prev, name: displayName, username: saneUsername, needsSetup: false } : null);
-      }
-      
-      setSuccess('Profile updated successfully!');
-       if (needsSetup) {
-        setTimeout(() => navigate('/'), 1500);
-      }
-
-    } catch (err) {
-      console.error(err);
-      setError('Failed to update profile. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleDelete = async () => {
-    if (!userInfo) return;
-
-    const confirmation = window.confirm(
-      'Are you sure you want to delete your account? This action is irreversible and will delete all your data.'
-    );
-
-    if (confirmation) {
-      setIsDeleting(true);
-      setError('');
-      try {
-        await deleteAccount();
-        navigate('/login');
-      } catch (err: any) {
-        if (err.code === 'auth/requires-recent-login') {
-          setError('This is a sensitive operation. Please log out and log back in before deleting your account.');
-        } else {
-          setError('Failed to delete account. Please try again.');
+        try {
+            if (displayName !== userInfo?.name) {
+                await updateProfile(user, { displayName });
+                await updateDoc(doc(db, 'users', user.uid), { name: displayName });
+                setUserInfo(prev => prev ? { ...prev, name: displayName } : null);
+            }
+            setSuccess('Profile updated successfully!');
+        } catch (err) {
+            setError('Failed to update profile');
+        } finally {
+            setLoading(false);
         }
-        setIsDeleting(false);
-      }
-    }
-  };
+    };
 
-  if (!userInfo) {
+    const handleDeleteAccount = async () => {
+        if (!window.confirm('Are you absolutely sure? This action cannot be undone.')) return;
+
+        setDeleting(true);
+        try {
+            await deleteAccount();
+            navigate('/login');
+        } catch (err) {
+            console.error(err);
+            setError('Failed to delete account. You may need to re-login just before deleting.');
+            setDeleting(false);
+        }
+    };
+
     return (
-        <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex items-center justify-center">
-          <Loader2 className="w-12 h-12 text-blue-600 animate-spin" />
-        </div>
-      );
-  }
+        <div className="min-h-screen bg-zinc-50 dark:bg-black p-4 md:p-8">
+            <div className="max-w-2xl mx-auto space-y-6">
 
-  return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
-      <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {!needsSetup && (
-            <button onClick={() => navigate(userInfo?.username ? `/profile/${userInfo.username}` : '/')} className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white mb-6">
-                <ArrowLeft className="w-5 h-5" />
-                Back to Profile
-            </button>
-        )}
-        <h1 className="text-3xl font-bold mb-6 text-gray-900 dark:text-white">Profile Settings</h1>
-        
-        {needsSetup && (
-            <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 text-blue-800 dark:text-blue-200 px-4 py-3 rounded-lg relative mb-6" role="alert">
-                <strong className="font-bold">Welcome!</strong>
-                <span className="block sm:inline"> Please complete your profile to continue. A unique username is required.</span>
+                {/* Header */}
+                <div className="flex items-center gap-4 mb-8">
+                    <Link
+                        to={userInfo?.username ? `/profile/${userInfo.username}` : '/'}
+                        className="p-2 -ml-2 rounded-full hover:bg-zinc-200 dark:hover:bg-zinc-800 transition-colors text-zinc-600 dark:text-zinc-400"
+                    >
+                        <ArrowLeft className="w-5 h-5" />
+                    </Link>
+                    <h1 className="text-2xl font-bold text-zinc-900 dark:text-white">Profile Settings</h1>
+                </div>
+
+                {/* Profile Card */}
+                <div className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-sm overflow-hidden">
+                    <div className="p-6 md:p-8 space-y-8">
+
+                        {/* Avatar Section */}
+                        <div className="flex flex-col items-center justify-center">
+                            <div className="relative group cursor-pointer" onClick={() => fileInputRef.current?.click()}>
+                                <div className="w-24 h-24 rounded-full overflow-hidden border-4 border-zinc-100 dark:border-zinc-800 relative bg-zinc-100 dark:bg-zinc-800">
+                                    <img
+                                        src={userInfo?.avatar || '/user.png'}
+                                        alt="Profile"
+                                        className="w-full h-full object-cover"
+                                    />
+                                    <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                        <Camera className="w-8 h-8 text-white" />
+                                    </div>
+                                    {uploadingPhoto && (
+                                        <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                                            <Loader2 className="w-8 h-8 text-white animate-spin" />
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="absolute bottom-0 right-0 bg-blue-600 border-2 border-white dark:border-zinc-900 rounded-full p-1.5">
+                                    <Camera className="w-3 h-3 text-white" />
+                                </div>
+                            </div>
+                            <input
+                                type="file"
+                                ref={fileInputRef}
+                                onChange={handlePhotoUpload}
+                                accept="image/*"
+                                className="hidden"
+                            />
+                            <p className="mt-3 text-sm text-zinc-500 dark:text-zinc-400">Click to update profile photo</p>
+                        </div>
+
+                        {/* Form */}
+                        <form onSubmit={handleSave} className="space-y-6">
+
+                            <div className="space-y-2">
+                                <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Display Name</label>
+                                <input
+                                    type="text"
+                                    value={displayName}
+                                    onChange={(e) => setDisplayName(e.target.value)}
+                                    className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all text-zinc-900 dark:text-white"
+                                    placeholder="Your Name"
+                                />
+                            </div>
+
+                            <div className="space-y-2">
+                                <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Username</label>
+                                <input
+                                    type="text"
+                                    value={username}
+                                    disabled
+                                    className="w-full px-3 py-2 bg-zinc-100 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-lg text-zinc-500 dark:text-zinc-500 cursor-not-allowed"
+                                />
+                                <p className="text-xs text-zinc-400">Username cannot be changed.</p>
+                            </div>
+
+                            <div className="space-y-2">
+                                <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Email</label>
+                                <input
+                                    type="email"
+                                    value={userInfo?.email || ''}
+                                    disabled
+                                    className="w-full px-3 py-2 bg-zinc-100 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-lg text-zinc-500 dark:text-zinc-500 cursor-not-allowed"
+                                />
+                                <p className="text-xs text-zinc-400">Email address cannot be changed.</p>
+                            </div>
+
+                            {error && (
+                                <div className="p-3 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm rounded-lg flex items-center gap-2">
+                                    <AlertTriangle className="w-4 h-4" />
+                                    {error}
+                                </div>
+                            )}
+
+                            {success && (
+                                <div className="p-3 bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 text-sm rounded-lg flex items-center gap-2">
+                                    <Save className="w-4 h-4" />
+                                    {success}
+                                </div>
+                            )}
+
+                            <button
+                                type="submit"
+                                disabled={loading || displayName === userInfo?.name}
+                                className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                                Save Changes
+                            </button>
+                        </form>
+                    </div>
+                </div>
+
+                {/* Danger Zone */}
+                <div className="border border-red-200 dark:border-red-900/50 rounded-xl overflow-hidden bg-white dark:bg-zinc-900">
+                    <div className="p-4 bg-red-50 dark:bg-red-900/10 border-b border-red-100 dark:border-red-900/50">
+                        <h3 className="text-red-700 dark:text-red-400 font-semibold flex items-center gap-2">
+                            <AlertTriangle className="w-5 h-5" />
+                            Danger Zone
+                        </h3>
+                    </div>
+                    <div className="p-6">
+                        <p className="text-sm text-zinc-600 dark:text-zinc-400 mb-4">
+                            Deleting your account is permanent and cannot be undone. All your practice history, stats, and data will be lost immediately.
+                        </p>
+                        <button
+                            onClick={handleDeleteAccount}
+                            disabled={deleting}
+                            className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50"
+                        >
+                            {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                            Delete My Account
+                        </button>
+                    </div>
+                </div>
+
             </div>
-        )}
-
-        <div className="bg-white dark:bg-gray-900 p-8 rounded-lg shadow-md space-y-6 border border-gray-200 dark:border-gray-800">
-          
-          <div className="flex flex-col items-center space-y-4">
-            <div className="relative">
-              <img 
-                src={userInfo.avatar || '/user.png'}
-                alt="Avatar" 
-                className="w-32 h-32 rounded-full object-cover border-4 border-gray-200 dark:border-gray-700"
-              />
-            </div>
-          </div>
-          
-          <div>
-            <label htmlFor="displayName" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Display Name</label>
-            <input 
-              type="text" 
-              id="displayName"
-              value={displayName}
-              onChange={(e) => setDisplayName(e.target.value)}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm dark:bg-gray-800 dark:border-gray-700 focus:border-indigo-500 focus:ring-indigo-500"
-            />
-          </div>
-          
-          <div>
-            <label htmlFor="username" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Username</label>
-            <input 
-              type="text" 
-              id="username"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm dark:bg-gray-800 dark:border-gray-700 focus:border-indigo-500 focus:ring-indigo-500"
-            />
-             <div className="mt-2 text-xs text-gray-500 h-4">
-                {usernameLoading ? (
-                    <span className="flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin"/> Checking...</span>
-                ) : username !== userInfo?.username && (
-                    username.length >= 3 ? (
-                        usernameAvailable ? (
-                           <span className="text-green-500">@{username} is available!</span>
-                        ) : (
-                           <span className="text-red-500">@{username} is already taken.</span>
-                        )
-                    ) : (
-                         <span className="text-red-500">Must be at least 3 characters.</span>
-                    )
-                )}
-             </div>
-             <p className="mt-2 text-xs text-gray-500">Allowed characters: letters, numbers, and underscores.</p>
-          </div>
-
-          <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Email</label>
-            <input 
-              type="email" 
-              id="email"
-              value={userInfo.email}
-              disabled
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm dark:bg-gray-700 dark:border-gray-600 focus:border-indigo-500 focus:ring-indigo-500 text-gray-500"
-            />
-             <p className="mt-2 text-xs text-gray-500">Email address cannot be changed.</p>
-          </div>
-
-          {error && <p className="text-red-500 text-sm">{error}</p>}
-          {success && <p className="text-green-500 text-sm">{success}</p>}
-
-          <button 
-            onClick={handleSave}
-            disabled={loading || usernameLoading || !usernameAvailable}
-            className="w-full py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 disabled:bg-gray-400 flex items-center justify-center gap-2"
-          >
-            {loading ? <Loader2 className="animate-spin" /> : <Save className="w-5 h-5"/>}
-            Save Changes
-          </button>
         </div>
-
-        <div className="mt-8 pt-6 border-t border-red-200 dark:border-red-900/50">
-          <h2 className="text-xl font-semibold text-red-600 dark:text-red-400">Danger Zone</h2>
-          <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-            Deleting your account is permanent and cannot be undone. All your practice history and stats will be lost.
-          </p>
-          <button
-            onClick={handleDelete}
-            disabled={isDeleting}
-            className="mt-4 w-full py-3 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700 disabled:bg-red-400 flex items-center justify-center gap-2"
-          >
-            {isDeleting ? <Loader2 className="animate-spin" /> : 'Delete My Account'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
+    );
 }
-
