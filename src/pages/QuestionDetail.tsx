@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, CheckCircle, XCircle, Loader2, BookOpen, Bookmark, Calendar, RefreshCcw, Save, Timer as TimerIcon, Play, Pause, LogIn, Check as CheckIcon, X as XIcon, FolderPlus, ListPlus, RotateCcw, ClipboardList } from 'lucide-react';
+import { ArrowLeft, ArrowRight, CheckCircle, XCircle, Loader2, BookOpen, Bookmark, Calendar, RotateCcw, Save, Timer as TimerIcon, Play, Pause, LogIn, Check as CheckIcon, X as XIcon, FolderPlus, ListPlus, ClipboardList } from 'lucide-react';
 
 import { doc, getDoc, setDoc, collection, getDocs, arrayUnion, arrayRemove, query, serverTimestamp, writeBatch, orderBy, addDoc } from 'firebase/firestore';
 import { db } from '../firebase';
@@ -792,263 +792,340 @@ export function QuestionDetail() {
         />
       )}
 
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="min-h-screen bg-zinc-50 dark:bg-black pb-20 md:pb-8">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-8">
+
+          {/* Top Navigation Bar */}
           <div className="flex justify-between items-center mb-6">
-            <button onClick={handlePrev} disabled={!findPrevQuestionId()} className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-              <ArrowLeft className="w-5 h-5" /> Previous
+            <button
+              onClick={handlePrev}
+              disabled={!findPrevQuestionId()}
+              className="flex items-center gap-2 px-3 py-1.5 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-900 rounded-lg transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+            >
+              <ArrowLeft className="w-5 h-5" />
+              <span className="hidden sm:inline font-medium">Previous</span>
             </button>
-            <button onClick={() => navigate('/practice')} className="text-sm font-medium text-blue-600 dark:text-blue-400 hover:underline">
-              Back to Practice List
+
+            <button
+              onClick={() => navigate('/practice')}
+              className="text-sm font-semibold text-zinc-500 hover:text-zinc-900 dark:text-zinc-500 dark:hover:text-zinc-300 transition-colors uppercase tracking-wide"
+            >
+              Back to List
             </button>
-            <button onClick={handleNext} disabled={!findNextQuestionId()} className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-              Next <ArrowRight className="w-5 h-5" />
+
+            <button
+              onClick={handleNext}
+              disabled={!findNextQuestionId()}
+              className="flex items-center gap-2 px-3 py-1.5 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-900 rounded-lg transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+            >
+              <span className="hidden sm:inline font-medium">Next</span>
+              <ArrowRight className="w-5 h-5" />
             </button>
           </div>
 
           {!loadingAuth && !isAuthenticated && <LoginPrompt />}
 
-          <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden shadow-lg">
-            <div className="p-6 border-b border-gray-200 dark:border-gray-800">
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-3 gap-4">
-                <h1 className="text-xl md:text-2xl font-bold text-gray-900 dark:text-white flex-1">
-                  {question.title}
-                </h1>
-                <div className="flex items-center gap-2 sm:gap-4 flex-shrink-0 w-full sm:w-auto justify-end">
-                  <div className="flex items-center gap-1.5 text-gray-600 dark:text-gray-400 font-medium bg-gray-100 dark:bg-gray-800 px-2.5 py-1 rounded-lg">
-                    <TimerIcon className="w-4 h-4" />
-                    <span className="text-sm tabular-nums">{formatTime(timeElapsed)}</span>
+          {/* Main Question Card */}
+          <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm overflow-hidden">
+
+            {/* Header Section */}
+            <div className="p-6 md:p-8 border-b border-zinc-100 dark:border-zinc-800/50">
+              <div className="flex flex-col gap-4">
+
+                <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
+                  <h1 className="text-xl md:text-2xl font-bold text-zinc-900 dark:text-white leading-tight">
+                    {question.title}
+                  </h1>
+
+                  {/* Toolbar */}
+                  <div className="flex items-center gap-2 self-start md:self-auto bg-zinc-100 dark:bg-zinc-800/50 p-1 rounded-xl">
+
+                    {/* Timer */}
+                    <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white dark:bg-zinc-800 shadow-sm border border-zinc-200/50 dark:border-zinc-700/50">
+                      <TimerIcon className={`w-4 h-4 ${isTimerOn ? 'text-blue-500 animate-pulse' : 'text-zinc-400'}`} />
+                      <span className="text-sm font-mono font-medium text-zinc-700 dark:text-zinc-300 min-w-[3rem] text-center">
+                        {formatTime(timeElapsed)}
+                      </span>
+                      <div className="w-px h-4 bg-zinc-200 dark:bg-zinc-700 mx-1"></div>
+                      <button
+                        onClick={() => setIsTimerOn(!isTimerOn)}
+                        disabled={submitted || !isAuthenticated}
+                        className="p-1 hover:text-blue-600 dark:hover:text-blue-400 transition-colors disabled:opacity-50"
+                      >
+                        {isTimerOn ? <Pause className="w-3.5 h-3.5 fill-current" /> : <Play className="w-3.5 h-3.5 fill-current" />}
+                      </button>
+                      <button
+                        onClick={handleResetTimer}
+                        disabled={submitted || !isAuthenticated || timeElapsed === 0}
+                        className="p-1 hover:text-red-500 transition-colors disabled:opacity-50"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+
+                    {/* Actions */}
                     <button
-                      onClick={() => setIsTimerOn(!isTimerOn)}
-                      disabled={submitted || !isAuthenticated}
-                      className="ml-1 p-1 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                      title={!isAuthenticated ? "Login to use timer" : (isTimerOn ? "Pause timer" : "Start timer")}
+                      onClick={handleToggleFavorite}
+                      disabled={!isAuthenticated}
+                      className={`p-2 rounded-lg transition-all ${isFavorite
+                        ? 'bg-yellow-100 text-yellow-600 dark:bg-yellow-900/30 dark:text-yellow-400'
+                        : 'text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 hover:bg-white dark:hover:bg-zinc-800'
+                        } disabled:opacity-50`}
+                      title="Favorite"
                     >
-                      {isTimerOn ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
+                      <Bookmark className={`w-4 h-4 ${isFavorite ? 'fill-current' : ''}`} />
                     </button>
+
                     <button
-                      onClick={handleResetTimer}
-                      disabled={submitted || !isAuthenticated || timeElapsed === 0}
-                      className="ml-0.5 p-1 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                      title={!isAuthenticated ? "Login to reset timer" : "Reset timer"}
+                      onClick={() => setShowListModal(true)}
+                      disabled={!isAuthenticated}
+                      className="p-2 rounded-lg text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 hover:bg-white dark:hover:bg-zinc-800 transition-all disabled:opacity-50"
+                      title="Save to List"
                     >
-                      <RotateCcw className="w-3.5 h-3.5" />
+                      <ListPlus className="w-4 h-4" />
                     </button>
+
                   </div>
+                </div>
+
+                {/* Tags */}
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold tracking-wide uppercase ${getQuestionTypeColor(question.question_type)}`}>
+                    {question.question_type || 'MCQ'}
+                  </span>
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700/50">
+                    <BookOpen className="w-3 h-3" /> {question.subject}
+                  </span>
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700/50">
+                    <FolderPlus className="w-3 h-3" /> {question.topic}
+                  </span>
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700/50">
+                    <Calendar className="w-3 h-3" /> GATE {question.year}
+                  </span>
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700/50">
+                    {question.branch?.toUpperCase() || 'GENERAL'}
+                  </span>
+                  {otherTags.map(tag => (
+                    <span key={tag} className="px-2 py-1 rounded-md text-xs text-zinc-500 dark:text-zinc-500 border border-zinc-100 dark:border-zinc-800">
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+
+              </div>
+            </div>
+
+            {/* Question Content */}
+            <div className="p-6 md:p-8">
+              <div
+                ref={questionRef}
+                className="prose prose-zinc dark:prose-invert prose-p:leading-relaxed prose-headings:font-bold prose-a:text-blue-600 dark:prose-a:text-blue-400 max-w-none mb-8 text-zinc-800 dark:text-zinc-200"
+                dangerouslySetInnerHTML={{ __html: cleanedQuestionHtml }}
+              />
+
+              {question.question_image_links && question.question_image_links.length > 0 && (
+                <div className="grid gap-6 mb-8">
+                  {question.question_image_links.map((imgUrl, index) => (
+                    <div key={`q-img-${index}`} className="relative rounded-xl overflow-hidden border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/50">
+                      <img src={imgUrl} alt={`Question illustration ${index + 1}`} className="max-w-full h-auto mx-auto" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Options Area */}
+              <div className="space-y-6">
+
+                {question.question_type === 'nat' ? (
+                  <div className="max-w-sm">
+                    <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">Your Answer</label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={natAnswer}
+                        onChange={(e) => setNatAnswer(e.target.value)}
+                        disabled={submitted || !isAuthenticated}
+                        className="w-full pl-4 pr-12 py-3 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-300 dark:border-zinc-700 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all font-mono text-lg disabled:opacity-50"
+                        placeholder="0.00"
+                      />
+                      <div className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none">
+                        #
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="grid gap-3">
+                    {question.options.map((option, index) => {
+                      const isSelected = question.question_type === 'msq' ? selectedOptions.includes(option.label) : selectedOptions[0] === option.label;
+                      const isCorrectOption = option.is_correct;
+                      const cleanedOptionHtml = extractAndCleanHtml(option.text_html, 'option_data');
+
+                      let containerClass = "relative w-full p-4 rounded-xl border-2 text-left transition-all duration-200 flex items-start gap-4 group ";
+                      let iconClass = "flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center font-bold text-sm transition-colors duration-200 ";
+
+                      if (!submitted) {
+                        if (isSelected) {
+                          containerClass += "bg-blue-50 dark:bg-blue-900/10 border-blue-500 shadow-sm shadow-blue-100 dark:shadow-none";
+                          iconClass += "bg-blue-500 text-white shadow-sm";
+                        } else {
+                          containerClass += "bg-white dark:bg-zinc-800/30 border-zinc-200 dark:border-zinc-800 hover:border-blue-300 dark:hover:border-blue-700 hover:bg-blue-50/30 dark:hover:bg-blue-900/5";
+                          iconClass += "bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 group-hover:bg-blue-100 dark:group-hover:bg-blue-900/30 group-hover:text-blue-600 dark:group-hover:text-blue-400";
+                        }
+                        if (isAuthenticated) containerClass += " cursor-pointer";
+                        else containerClass += " cursor-not-allowed opacity-70";
+                      } else {
+                        containerClass += " cursor-default ";
+                        if (isCorrectOption) {
+                          containerClass += "bg-emerald-50 dark:bg-emerald-900/10 border-emerald-500 shadow-sm";
+                          iconClass += "bg-emerald-500 text-white shadow-sm";
+                        } else if (isSelected && !isCorrectOption) {
+                          containerClass += "bg-red-50 dark:bg-red-900/10 border-red-500 shadow-sm";
+                          iconClass += "bg-red-500 text-white shadow-sm";
+                        } else {
+                          containerClass += "bg-zinc-50/50 dark:bg-zinc-900/50 border-zinc-100 dark:border-zinc-800 opacity-50";
+                          iconClass += "bg-zinc-100 dark:bg-zinc-800 text-zinc-400";
+                        }
+                      }
+
+                      return (
+                        <button
+                          key={option.label}
+                          ref={el => optionsRef.current[index] = el}
+                          onClick={() => question.question_type === 'msq' ? handleMsqToggle(option.label) : handleMcqSelect(option.label)}
+                          disabled={submitted || !isAuthenticated}
+                          className={containerClass}
+                        >
+                          <span className={iconClass}>
+                            {submitted && isCorrectOption ? <CheckIcon className="w-5 h-5" /> :
+                              submitted && !isCorrectOption && isSelected ? <XIcon className="w-5 h-5" /> :
+                                option.label}
+                          </span>
+                          <span className="flex-1 pt-1 text-zinc-700 dark:text-zinc-300 prose prose-sm dark:prose-invert font-medium" dangerouslySetInnerHTML={{ __html: cleanedOptionHtml }} />
+
+                          {submitted && (
+                            <div className="absolute top-4 right-4">
+                              {isCorrectOption ? <CheckCircle className="w-5 h-5 text-emerald-500" /> :
+                                isSelected ? <XCircle className="w-5 h-5 text-red-500" /> : null}
+                            </div>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Action Buttons */}
+              <div className="mt-8 pt-6 border-t border-zinc-100 dark:border-zinc-800">
+                {!submitted ? (
                   <button
-                    onClick={handleToggleFavorite}
-                    disabled={!isAuthenticated}
-                    className={`flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg transition-colors border whitespace-nowrap ${isFavorite
-                      ? 'bg-yellow-100 text-yellow-800 border-yellow-200 dark:bg-yellow-900/50 dark:text-yellow-300 dark:border-yellow-700'
-                      : 'bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700 hover:bg-gray-200 dark:hover:bg-gray-700'
-                      } disabled:opacity-50 disabled:cursor-not-allowed`}
-                    title={!isAuthenticated ? "Login to add to Favorites" : (isFavorite ? "Remove from Favorites" : "Add to Favorites")}
+                    onClick={handleSubmit}
+                    disabled={(!selectedOptions.length && (question.question_type === 'mcq' || question.question_type === 'msq')) || (question.question_type === 'nat' && !natAnswer) || loadingAuth}
+                    className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white rounded-xl font-bold tracking-wide shadow-lg shadow-blue-500/20 hover:shadow-blue-500/30 transition-all transform active:scale-[0.99] disabled:opacity-50 disabled:shadow-none disabled:cursor-not-allowed"
                   >
-                    <Bookmark className={`w-3.5 h-3.5 ${isFavorite ? 'fill-current' : ''}`} />
-                    {isFavorite ? 'Favorited' : 'Favorite'}
+                    Submit Answer
                   </button>
+                ) : (
+                  <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+
+                    {/* Result Banner */}
+                    <div className={`p-4 rounded-xl flex items-start gap-4 ${isCorrect ? 'bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-900/50' : 'bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-900/50'}`}>
+                      <div className={`p-2 rounded-full ${isCorrect ? 'bg-emerald-100 dark:bg-emerald-900/50 text-emerald-600 dark:text-emerald-400' : 'bg-red-100 dark:bg-red-900/50 text-red-600 dark:text-red-400'}`}>
+                        {isCorrect ? <CheckIcon className="w-6 h-6" /> : <XIcon className="w-6 h-6" />}
+                      </div>
+                      <div>
+                        <h3 className={`text-lg font-bold mb-1 ${isCorrect ? 'text-emerald-800 dark:text-emerald-400' : 'text-red-800 dark:text-red-400'}`}>
+                          {isCorrect ? 'Correct Answer!' : 'Incorrect'}
+                        </h3>
+                        <p className={`text-sm ${isCorrect ? 'text-emerald-700 dark:text-emerald-300' : 'text-red-700 dark:text-red-300'}`}>
+                          {question.question_type === 'nat' && !isCorrect && `The correct range is ${question.nat_answer_min} - ${question.nat_answer_max}`}
+                          {question.question_type === 'mcq' && !isCorrect && `The correct option is ${question.options.find(o => o.is_correct)?.label}`}
+                          {question.question_type === 'msq' && !isCorrect && `Correct options: ${question.options.filter(o => o.is_correct).map(o => o.label).join(', ')}`}
+                          {isCorrect && "Great job! You nailed it."}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Explanation */}
+                    {(cleanedExplanationHtml || (question.explanation_image_links && question.explanation_image_links.length > 0)) && (
+                      <div className="bg-zinc-50 dark:bg-zinc-900/50 rounded-xl overflow-hidden border border-zinc-200 dark:border-zinc-800">
+                        <div className="px-6 py-3 bg-zinc-100/50 dark:bg-zinc-800/50 border-b border-zinc-200 dark:border-zinc-800 flex items-center gap-2">
+                          <BookOpen className="w-4 h-4 text-zinc-500" />
+                          <h3 className="font-semibold text-zinc-900 dark:text-white">Explanation</h3>
+                        </div>
+                        <div className="p-6">
+                          <div
+                            ref={explanationRef}
+                            className="prose prose-sm dark:prose-invert max-w-none text-zinc-700 dark:text-zinc-300"
+                            dangerouslySetInnerHTML={{ __html: cleanedExplanationHtml }}
+                          />
+                          {!question.explanation_redirect_url && question.explanation_image_links && question.explanation_image_links.length > 0 && (
+                            <div className="mt-6 space-y-4">
+                              {question.explanation_image_links.map((imgUrl, index) => (
+                                <img key={`e-img-${index}`} src={imgUrl} alt={`Explanation illustration ${index + 1}`} className="rounded-lg border dark:border-zinc-700 max-w-full h-auto mx-auto" />
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Control Buttons (Try Again / Next) */}
+                    <div className="flex gap-4">
+                      <button
+                        onClick={handleTryAgain}
+                        disabled={resetting}
+                        className="flex-1 py-3 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-900 dark:text-white rounded-xl font-semibold transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                      >
+                        {resetting ? <Loader2 className="w-5 h-5 animate-spin" /> : <RotateCcw className="w-5 h-5" />}
+                        Try Again
+                      </button>
+                      <button
+                        onClick={handleNext}
+                        disabled={!findNextQuestionId()}
+                        className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:bg-zinc-200 dark:disabled:bg-zinc-800 disabled:text-zinc-400"
+                      >
+                        Next Question
+                        <ArrowRight className="w-5 h-5" />
+                      </button>
+                    </div>
+
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Notes Section Footer */}
+            <div className="bg-zinc-50 dark:bg-black/20 p-6 md:p-8 border-t border-zinc-200 dark:border-zinc-800">
+              <h3 className="text-sm font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-4 flex items-center gap-2">
+                <ClipboardList className="w-4 h-4" /> Personal Notes
+              </h3>
+              <div className="relative">
+                <textarea
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                  disabled={!isAuthenticated}
+                  placeholder={isAuthenticated ? "Write your private notes, thoughts or doubts about this question here..." : "Login to save private notes."}
+                  className="w-full p-4 text-sm bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-shadow min-h-[120px] resize-y disabled:bg-zinc-100 dark:disabled:bg-zinc-800 disabled:text-zinc-500"
+                />
+                <div className="absolute bottom-3 right-3">
                   <button
-                    onClick={() => setShowListModal(true)}
-                    disabled={!isAuthenticated}
-                    className="flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg transition-colors border bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700 hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                    title={!isAuthenticated ? "Login to save to lists" : "Save to list"}
+                    onClick={handleSaveNote}
+                    disabled={!isAuthenticated || savingNote}
+                    className="px-4 py-1.5 bg-zinc-900 dark:bg-white text-white dark:text-black rounded-lg text-xs font-bold hover:bg-zinc-700 dark:hover:bg-zinc-200 transition-colors disabled:opacity-50 flex items-center gap-2"
                   >
-                    <ListPlus className="w-3.5 h-3.5" />
+                    {savingNote ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
                     Save
                   </button>
                 </div>
               </div>
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-gray-600 dark:text-gray-400">
-                <span className={`flex items-center gap-1 px-2 py-0.5 rounded-full font-medium uppercase ${getQuestionTypeColor(question.question_type)}`}>
-                  <ClipboardList className="w-3.5 h-3.5" /> {question.question_type || 'N/A'}
-                </span>
-                <span className="flex items-center gap-1"><BookOpen className="w-3.5 h-3.5" /> {question.subject}</span>
-                <span className="flex items-center gap-1"><Bookmark className="w-3.5 h-3.5" /> {question.topic}</span>
-                <span className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5" /> GATE {question.year}</span>
-                <span className="flex items-center gap-1 px-2 py-0.5 rounded-full font-medium bg-gray-100 dark:bg-gray-700/50 text-gray-700 dark:text-gray-300">
-                  {question.branch?.toUpperCase() || 'GENERAL'}
-                </span>
-              </div>
-              {otherTags.length > 0 && (
-                <div className="mt-3 flex flex-wrap items-center gap-1.5">
-                  {otherTags.map(tag => (
-                    <span key={tag} className="px-2 py-0.5 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded text-xs">{tag}</span>
-                  ))}
-                </div>
-              )}
             </div>
 
-            <div className="p-6">
-              {/* --- LAYOUT FIX: Reduced mb-8 to mb-4 --- */}
-              <div
-                ref={questionRef}
-                className="text-gray-800 dark:text-gray-200 max-w-none mb-4 prose dark:prose-invert prose-sm md:prose-base"
-                dangerouslySetInnerHTML={{ __html: cleanedQuestionHtml }}
-              />
-
-              {/* --- LAYOUT FIX: Reduced mb-8 to mb-6 --- */}
-              {question.question_image_links && question.question_image_links.length > 0 && (
-                <div className="space-y-4 mb-6">
-                  {question.question_image_links.map((imgUrl, index) => (
-                    <img key={`q-img-${index}`} src={imgUrl} alt={`Question illustration ${index + 1}`} className="rounded-lg border dark:border-gray-700 max-w-full h-auto mx-auto" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-                  ))}
-                </div>
-              )}
-
-              {/* Options Rendering */}
-              {question.question_type === 'nat' ? (
-                <div className="mb-8">
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Your Answer</label>
-                  <input type="text" value={natAnswer} onChange={(e) => setNatAnswer(e.target.value)} disabled={submitted || !isAuthenticated} className="w-full max-w-xs px-4 py-3 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-white disabled:bg-gray-100 dark:disabled:bg-gray-800 disabled:cursor-not-allowed" placeholder="Enter numerical answer" />
-                </div>
-              ) : question.question_type === 'msq' ? (
-                <div className="space-y-3 mb-8">
-                  {question.options.map((option, index) => {
-                    const isSelected = selectedOptions.includes(option.label);
-                    const isCorrectOption = option.is_correct;
-                    const cleanedOptionHtml = extractAndCleanHtml(option.text_html, 'option_data');
-                    let optionClasses = 'w-full p-4 rounded-lg border-2 text-left transition-all flex items-start gap-3 ';
-                    let stateIndicator: React.ReactNode = null;
-                    if (!submitted) {
-                      optionClasses += isSelected ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30 ring-2 ring-blue-300 dark:ring-blue-700' : 'border-gray-200 dark:border-gray-700';
-                      if (isAuthenticated) optionClasses += ' hover:border-blue-400 dark:hover:border-blue-600 cursor-pointer';
-                      else optionClasses += ' cursor-default opacity-75';
-                    } else {
-                      optionClasses += ' cursor-default ';
-                      if (isCorrectOption) {
-                        optionClasses += 'border-green-500 bg-green-50 dark:bg-green-900/30';
-                        stateIndicator = <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0 mt-1" />;
-                      } else if (isSelected && !isCorrectOption) {
-                        optionClasses += 'border-red-500 bg-red-50 dark:bg-red-900/30';
-                        stateIndicator = <XCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-1" />;
-                      } else {
-                        optionClasses += 'border-gray-200 dark:border-gray-700 opacity-60';
-                      }
-                    }
-                    return (
-                      <button key={option.label} ref={el => optionsRef.current[index] = el} onClick={() => handleMsqToggle(option.label)} disabled={submitted || !isAuthenticated} className={optionClasses} title={!isAuthenticated ? "Login to select an option" : ""}>
-                        <span className={`flex-shrink-0 w-7 h-7 rounded-md border-2 flex items-center justify-center font-semibold text-sm mt-0.5 ${isSelected && !submitted ? 'bg-blue-500 border-blue-500 text-white' : submitted && isCorrectOption ? 'bg-green-500 border-green-500 text-white' : submitted && isSelected && !isCorrectOption ? 'bg-red-500 border-red-500 text-white' : 'bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300'}`}>
-                          {isSelected ? <CheckIcon className="w-4 h-4" /> : option.label}
-                        </span>
-                        <span className="flex-1 text-gray-900 dark:text-white prose dark:prose-invert prose-sm" dangerouslySetInnerHTML={{ __html: cleanedOptionHtml }} />
-                        {stateIndicator}
-                      </button>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="space-y-3 mb-8">
-                  {question.options.map((option, index) => {
-                    const isSelected = selectedOptions[0] === option.label;
-                    const isCorrectOption = option.is_correct;
-                    const cleanedOptionHtml = extractAndCleanHtml(option.text_html, 'option_data');
-                    let optionClasses = 'w-full p-4 rounded-lg border-2 text-left transition-all flex items-start gap-3 ';
-                    let stateIndicator: React.ReactNode = null;
-                    if (!submitted) {
-                      optionClasses += isSelected ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30 ring-2 ring-blue-300 dark:ring-blue-700' : 'border-gray-200 dark:border-gray-700';
-                      if (isAuthenticated) optionClasses += ' hover:border-blue-400 dark:hover:border-blue-600 cursor-pointer';
-                      else optionClasses += ' cursor-default opacity-75';
-                    } else {
-                      optionClasses += ' cursor-default ';
-                      if (isCorrectOption) {
-                        optionClasses += 'border-green-500 bg-green-50 dark:bg-green-900/30';
-                        stateIndicator = <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0 mt-1" />;
-                      } else if (isSelected && !isCorrectOption) {
-                        optionClasses += 'border-red-500 bg-red-50 dark:bg-red-900/30';
-                        stateIndicator = <XCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-1" />;
-                      } else {
-                        optionClasses += 'border-gray-200 dark:border-gray-700 opacity-60';
-                      }
-                    }
-                    return (
-                      <button key={option.label} ref={el => optionsRef.current[index] = el} onClick={() => handleMcqSelect(option.label)} disabled={submitted || !isAuthenticated} className={optionClasses} title={!isAuthenticated ? "Login to select an option" : ""}>
-                        <span className={`flex-shrink-0 w-7 h-7 rounded-full border-2 flex items-center justify-center font-semibold text-sm mt-0.5 ${isSelected && !submitted ? 'bg-blue-500 border-blue-500 text-white' : submitted && isCorrectOption ? 'bg-green-500 border-green-500 text-white' : submitted && isSelected && !isCorrectOption ? 'bg-red-500 border-red-500 text-white' : 'bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300'}`}>
-                          {option.label}
-                        </span>
-                        <span className="flex-1 text-gray-900 dark:text-white prose dark:prose-invert prose-sm" dangerouslySetInnerHTML={{ __html: cleanedOptionHtml }} />
-                        {stateIndicator}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-
-              {isAuthenticated && !submitted && (
-                <button
-                  onClick={handleSubmit}
-                  disabled={(!selectedOptions.length && (question.question_type === 'mcq' || question.question_type === 'msq')) || (question.question_type === 'nat' && !natAnswer) || loadingAuth}
-                  className="w-full py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 disabled:bg-gray-400 dark:disabled:bg-gray-700 disabled:cursor-not-allowed transition-colors"
-                >
-                  Submit Answer
-                </button>
-              )}
-              {submitted && (
-                <div className="space-y-4">
-                  <div className={`p-4 rounded-lg border ${isCorrect ? 'bg-green-50 dark:bg-green-950/50 border-green-200 dark:border-green-800' : 'bg-red-50 dark:bg-red-950/50 border-red-200 dark:border-red-800'}`}>
-                    <div className="flex items-center gap-3">
-                      {isCorrect ? <CheckCircle className="w-6 h-6 text-green-600" /> : <XCircle className="w-6 h-6 text-red-600" />}
-                      <span className={`font-semibold ${isCorrect ? 'text-green-800 dark:text-green-200' : 'text-red-800 dark:text-red-200'}`}>
-                        {isCorrect ? 'Correct!' : 'Incorrect.'}
-                        {question.question_type === 'nat' && !isCorrect && ` The correct answer is between ${question.nat_answer_min || 'N/A'} and ${question.nat_answer_max || 'N/A'}.`}
-                        {question.question_type === 'mcq' && !isCorrect && ` Correct option was ${question.options.find(o => o.is_correct)?.label}.`}
-                        {question.question_type === 'msq' && !isCorrect && ` Correct options were ${question.options.filter(o => o.is_correct).map(o => o.label).join(', ')}.`}
-                      </span>
-                    </div>
-                  </div>
-                  {(cleanedExplanationHtml || (question.explanation_image_links && question.explanation_image_links.length > 0)) && (
-                    <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-6 border border-gray-200 dark:border-gray-700/50">
-                      <h3 className="font-semibold text-gray-800 dark:text-gray-100 mb-3 text-lg">Explanation</h3>
-
-                      <div
-                        ref={explanationRef}
-                        className="max-w-none text-gray-700 dark:text-gray-300 text-sm prose dark:prose-invert prose-sm md:prose-base"
-                        dangerouslySetInnerHTML={{ __html: cleanedExplanationHtml }}
-                      />
-
-                      {!question.explanation_redirect_url && question.explanation_image_links && question.explanation_image_links.length > 0 && (
-                        <div className="space-y-4 mt-4">
-                          {question.explanation_image_links.map((imgUrl, index) => (
-                            <img key={`e-img-${index}`} src={imgUrl} alt={`Explanation illustration ${index + 1}`} className="rounded-lg border dark:border-gray-700 max-w-full h-auto mx-auto" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                  <div className="flex flex-col sm:flex-row gap-3">
-                    <button onClick={handleTryAgain} disabled={resetting} className="flex-1 py-3 bg-gray-200 text-gray-800 dark:bg-gray-700 dark:text-white rounded-lg font-semibold hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors flex items-center justify-center gap-2 disabled:opacity-50">
-                      {resetting ? <Loader2 className="w-5 h-5 animate-spin" /> : <RefreshCcw className="w-5 h-5" />}
-                      Try Again
-                    </button>
-                    <button onClick={handleNext} disabled={!findNextQuestionId()} className="flex-1 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors flex items-center justify-center gap-2 disabled:bg-gray-400 dark:disabled:bg-gray-700 disabled:cursor-not-allowed">
-                      Next Question <ArrowRight className="w-5 h-5" />
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div className="p-6 border-t border-gray-200 dark:border-gray-800">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">My Notes</h3>
-              <textarea
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
-                disabled={!isAuthenticated}
-                placeholder={isAuthenticated ? "Write a short note for this question..." : "Login to save notes."}
-                className="w-full p-3 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-white min-h-[100px] disabled:bg-gray-100 dark:disabled:bg-gray-800 disabled:cursor-not-allowed"
-              />
-              <button
-                onClick={handleSaveNote}
-                disabled={!isAuthenticated || savingNote}
-                className="mt-3 w-full sm:w-auto px-6 py-2 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 disabled:bg-gray-400 dark:disabled:bg-gray-500 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-              >
-                {savingNote ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
-                Save Note
-              </button>
-            </div>
           </div>
         </div>
       </div>
     </>
+
   );
 }
 
