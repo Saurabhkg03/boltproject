@@ -6,35 +6,46 @@ import { MetadataProvider } from './contexts/MetadataContext';
 import { Navbar } from './components/Navbar';
 import { BottomNavbar } from './components/BottomNavbar';
 import { ProtectedRoute } from './components/ProtectedRoute';
-import { Home } from './pages/Home';
-import { Practice } from './pages/Practice';
-import { QuestionDetail } from './pages/QuestionDetail';
-import { Leaderboard } from './pages/Leaderboard';
-import { Profile } from './pages/Profile';
-import { Login } from './pages/Login';
-import { AdminPanel } from './pages/AdminPanel';
-import { AddQuestion } from './pages/AddQuestion';
-import { Settings } from './pages/Settings';
-import { useEffect } from 'react';
+import { lazy, Suspense } from 'react';
 import { NotFound } from './pages/NotFound';
+import { QueryCacheProvider } from './contexts/QueryCacheContext';
 
 import { AnimatePresence } from 'framer-motion';
 import { PageTransition } from './components/PageTransition';
 import { ScrollToTop } from './components/ScrollToTop';
 
+// --- OPTIMIZATION: Route-based Code Splitting (Next.js style) ---
+const Home = lazy(() => import('./pages/Home').then(m => ({ default: m.Home })));
+const Practice = lazy(() => import('./pages/Practice').then(m => ({ default: m.Practice })));
+const QuestionDetail = lazy(() => import('./pages/QuestionDetail').then(m => ({ default: m.QuestionDetail })));
+const Leaderboard = lazy(() => import('./pages/Leaderboard').then(m => ({ default: m.Leaderboard })));
+const Profile = lazy(() => import('./pages/Profile').then(m => ({ default: m.Profile })));
+const Login = lazy(() => import('./pages/Login').then(m => ({ default: m.Login })));
+const AdminPanel = lazy(() => import('./pages/AdminPanel').then(m => ({ default: m.AdminPanel })));
+const AddQuestion = lazy(() => import('./pages/AddQuestion').then(m => ({ default: m.AddQuestion })));
+const Settings = lazy(() => import('./pages/Settings').then(m => ({ default: m.Settings })));
+
+// Loading component for Suspense
+const PageLoader = () => (
+  <div className="flex-1 flex items-center justify-center min-h-[60vh]">
+    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+  </div>
+);
+
 const AppContent = () => {
-  const { userInfo, loading, isAuthenticated } = useAuth();
+  const { userInfo, isAuthenticated } = useAuth();
   const location = useLocation();
 
   if (isAuthenticated && userInfo && userInfo.needsSetup && location.pathname !== '/settings') {
     return <Navigate to="/settings" state={{ from: location }} replace />;
   }
 
-  const showNav = location.pathname !== '/login';
+  const isLoginPage = location.pathname === '/login';
 
   return (
-    <>
-      {showNav && (
+    <div className="flex flex-col min-h-screen">
+      {/* --- PERSISTENT LAYOUT: Navbars stay mounted across transitions --- */}
+      {!isLoginPage && (
         <>
           <Navbar />
           <div className="md:hidden">
@@ -43,64 +54,69 @@ const AppContent = () => {
         </>
       )}
 
-      <main className="relative z-10 pb-16 md:pb-0">
-        <AnimatePresence mode="wait">
-          <Routes location={location} key={location.pathname}>
-            <Route path="/" element={<PageTransition><Home /></PageTransition>} />
-            <Route path="/practice" element={<PageTransition><Practice /></PageTransition>} />
-            <Route path="/leaderboard" element={<PageTransition><Leaderboard /></PageTransition>} />
-            <Route path="/login" element={<PageTransition><Login /></PageTransition>} />
-            <Route path="/profile/:username" element={<PageTransition><Profile /></PageTransition>} />
-            <Route path="/question/:id" element={<PageTransition><QuestionDetail /></PageTransition>} />
+      <main className={cn("flex-1 relative z-10", !isLoginPage && "pb-16 md:pb-0")}>
+        <Suspense fallback={<PageLoader />}>
+          <AnimatePresence mode="wait">
+            <Routes location={location} key={location.pathname}>
+              <Route path="/" element={<PageTransition><Home /></PageTransition>} />
+              <Route path="/practice" element={<PageTransition><Practice /></PageTransition>} />
+              <Route path="/leaderboard" element={<PageTransition><Leaderboard /></PageTransition>} />
+              <Route path="/login" element={<PageTransition><Login /></PageTransition>} />
+              <Route path="/profile/:username" element={<PageTransition><Profile /></PageTransition>} />
+              <Route path="/question/:id" element={<PageTransition><QuestionDetail /></PageTransition>} />
 
-            <Route
-              path="/settings"
-              element={
-                <PageTransition>
-                  <ProtectedRoute>
-                    <Settings />
-                  </ProtectedRoute>
-                </PageTransition>
-              }
-            />
-            <Route
-              path="/admin"
-              element={
-                <PageTransition>
-                  <ProtectedRoute allowedRoles={['admin', 'moderator']}>
-                    <AdminPanel />
-                  </ProtectedRoute>
-                </PageTransition>
-              }
-            />
-            <Route
-              path="/add-question"
-              element={
-                <PageTransition>
-                  <ProtectedRoute allowedRoles={['admin', 'moderator']}>
-                    <AddQuestion />
-                  </ProtectedRoute>
-                </PageTransition>
-              }
-            />
-            <Route
-              path="/edit-question/:id"
-              element={
-                <PageTransition>
-                  <ProtectedRoute allowedRoles={['admin', 'moderator']}>
-                    <AddQuestion />
-                  </ProtectedRoute>
-                </PageTransition>
-              }
-            />
+              <Route
+                path="/settings"
+                element={
+                  <PageTransition>
+                    <ProtectedRoute>
+                      <Settings />
+                    </ProtectedRoute>
+                  </PageTransition>
+                }
+              />
+              <Route
+                path="/admin"
+                element={
+                  <PageTransition>
+                    <ProtectedRoute allowedRoles={['admin', 'moderator']}>
+                      <AdminPanel />
+                    </ProtectedRoute>
+                  </PageTransition>
+                }
+              />
+              <Route
+                path="/add-question"
+                element={
+                  <PageTransition>
+                    <ProtectedRoute allowedRoles={['admin', 'moderator']}>
+                      <AddQuestion />
+                    </ProtectedRoute>
+                  </PageTransition>
+                }
+              />
+              <Route
+                path="/edit-question/:id"
+                element={
+                  <PageTransition>
+                    <ProtectedRoute allowedRoles={['admin', 'moderator']}>
+                      <AddQuestion />
+                    </ProtectedRoute>
+                  </PageTransition>
+                }
+              />
 
-            <Route path="*" element={<PageTransition><NotFound /></PageTransition>} />
-          </Routes>
-        </AnimatePresence>
+              <Route path="*" element={<PageTransition><NotFound /></PageTransition>} />
+            </Routes>
+          </AnimatePresence>
+        </Suspense>
       </main>
-    </>
+    </div>
   );
 }
+
+// Helper for cn (already exists in project, but imported here for safety)
+import { cn } from './lib/utils';
 
 function App() {
   return (
@@ -108,12 +124,14 @@ function App() {
       <BrowserRouter>
         <AuthProvider>
           <MetadataProvider>
-            <DailyChallengeProvider>
-              <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950">
-                <ScrollToTop />
-                <AppContent />
-              </div>
-            </DailyChallengeProvider>
+            <QueryCacheProvider>
+              <DailyChallengeProvider>
+                <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 font-sans text-foreground">
+                  <ScrollToTop />
+                  <AppContent />
+                </div>
+              </DailyChallengeProvider>
+            </QueryCacheProvider>
           </MetadataProvider>
         </AuthProvider>
       </BrowserRouter>

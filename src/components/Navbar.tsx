@@ -1,5 +1,5 @@
 import React from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import { Moon, Sun, LogOut, User, Shield, Settings, ChevronDown, Flame, BookCopy } from 'lucide-react';
 import { motion } from 'framer-motion';
 
@@ -7,8 +7,19 @@ import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDailyChallenge } from '../contexts/DailyChallengeContext';
 import { useMetadata } from '../contexts/MetadataContext';
-import { cn } from '@/lib/utils'; // Updated import
+import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import { PrefetchLink } from './PrefetchLink';
+
+// Prefetch triggers for lazy-loaded pages
+const prefetchHome = () => import('../pages/Home');
+const prefetchPractice = () => import('../pages/Practice');
+const prefetchLeaderboard = () => import('../pages/Leaderboard');
+const prefetchSettings = () => import('../pages/Settings');
+const prefetchAdmin = () => import('../pages/AdminPanel');
+const prefetchProfile = () => import('../pages/Profile');
+const prefetchLogin = () => import('../pages/Login');
+
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -73,8 +84,9 @@ const NavLinkItem = ({ to, label, icon }: { to: string, label: string, icon?: Re
   const isActive = location.pathname === to;
 
   return (
-    <Link
+    <PrefetchLink
       to={to}
+      onPrefetch={to === '/' ? prefetchHome : to === '/practice' ? prefetchPractice : to === '/leaderboard' ? prefetchLeaderboard : to === '/admin' ? prefetchAdmin : undefined}
       className={cn(
         "relative flex items-center gap-2 px-3 py-1.5 text-sm font-medium transition-colors rounded-full z-10",
         isActive ? "text-zinc-900 dark:text-white" : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100"
@@ -89,7 +101,7 @@ const NavLinkItem = ({ to, label, icon }: { to: string, label: string, icon?: Re
       )}
       {icon}
       {label}
-    </Link>
+    </PrefetchLink>
   );
 };
 
@@ -105,10 +117,10 @@ export function Navbar() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16 gap-2">
           {/* Logo */}
-          <Link to="/" className="flex items-center gap-2 font-bold text-zinc-900 dark:text-white shrink-0">
+          <PrefetchLink to="/" onPrefetch={prefetchHome} className="flex items-center gap-2 font-bold text-zinc-900 dark:text-white shrink-0">
             <img src="/logo.png" alt="GATECode Logo" className="w-8 h-8 rounded-lg" />
             <span className="text-xl tracking-tight">GATECode</span>
-          </Link>
+          </PrefetchLink>
 
           {/* Desktop Navigation */}
           <div className="hidden md:flex items-center gap-1 bg-zinc-100/50 dark:bg-zinc-900/50 p-1 rounded-full border border-zinc-200/50 dark:border-zinc-800/50">
@@ -135,8 +147,9 @@ export function Navbar() {
             </Button>
 
             {isAuthenticated && streak > 0 && (
-              <Link
+              <PrefetchLink
                 to={!loadingChallenge && dailyChallengeId ? `/question/${dailyChallengeId}` : '/practice'}
+                onPrefetch={!loadingChallenge && dailyChallengeId ? undefined : prefetchPractice}
                 className={cn(
                   "flex items-center gap-1.5 px-2.5 py-1.5 rounded-full transition-all border",
                   !loadingChallenge && dailyChallengeId
@@ -147,7 +160,7 @@ export function Navbar() {
               >
                 <Flame className={cn("w-4 h-4 fill-current", !loadingChallenge && dailyChallengeId && "animate-pulse")} />
                 <span className="text-sm font-bold tabular-nums">{streak}</span>
-              </Link>
+              </PrefetchLink>
             )}
 
             {isAuthenticated && userInfo ? (
@@ -170,23 +183,23 @@ export function Navbar() {
                   </DropdownMenuLabel>
                   {/* <DropdownMenuSeparator className="bg-zinc-200/50 dark:bg-zinc-800/50 mb-1" /> */}
                   <DropdownMenuItem asChild className="rounded-lg focus:bg-blue-50 dark:focus:bg-blue-900/20 focus:text-blue-600 dark:focus:text-blue-400 cursor-pointer p-2.5 transition-colors">
-                    <Link to={userInfo.username ? `/profile/${userInfo.username}` : '#'} className="cursor-pointer">
+                    <PrefetchLink to={userInfo.username ? `/profile/${userInfo.username}` : '#'} onPrefetch={prefetchProfile} className="cursor-pointer">
                       <User className="mr-2.5 h-4 w-4" />
                       <span className="font-medium">Profile</span>
-                    </Link>
+                    </PrefetchLink>
                   </DropdownMenuItem>
                   <DropdownMenuItem asChild className="rounded-lg focus:bg-zinc-100 dark:focus:bg-zinc-800 cursor-pointer p-2.5 transition-colors">
-                    <Link to="/settings" className="cursor-pointer">
+                    <PrefetchLink to="/settings" onPrefetch={prefetchSettings} className="cursor-pointer">
                       <Settings className="mr-2.5 h-4 w-4" />
                       <span className="font-medium">Settings</span>
-                    </Link>
+                    </PrefetchLink>
                   </DropdownMenuItem>
                   {(userInfo?.role === 'admin' || userInfo?.role === 'moderator') && (
                     <DropdownMenuItem asChild className="md:hidden rounded-lg focus:bg-zinc-100 dark:focus:bg-zinc-800 cursor-pointer p-2.5 transition-colors">
-                      <Link to="/admin" className="cursor-pointer">
+                      <PrefetchLink to="/admin" onPrefetch={prefetchAdmin} className="cursor-pointer">
                         <Shield className="mr-2.5 h-4 w-4" />
                         <span className="font-medium">Admin Panel</span>
-                      </Link>
+                      </PrefetchLink>
                     </DropdownMenuItem>
                   )}
                   <DropdownMenuSeparator className="bg-zinc-200/50 dark:bg-zinc-800/50 my-1" />
@@ -203,9 +216,9 @@ export function Navbar() {
               </DropdownMenu>
             ) : (
               <Button asChild size="sm" className="rounded-full px-4">
-                <Link to="/login">
+                <PrefetchLink to="/login" onPrefetch={prefetchLogin}>
                   Login
-                </Link>
+                </PrefetchLink>
               </Button>
             )}
           </div>

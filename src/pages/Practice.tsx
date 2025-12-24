@@ -7,6 +7,7 @@ import { db } from '../firebase';
 import { collection, getDocs, query, where, orderBy, limit, startAfter, DocumentSnapshot, endBefore, limitToLast, doc, getDoc, documentId, addDoc, serverTimestamp, deleteDoc, writeBatch, arrayRemove, onSnapshot, Query, DocumentData } from 'firebase/firestore';
 import { Question, Submission, QuestionList } from '../data/mockData';
 import { PracticeSkeleton } from '../components/Skeletons';
+import { useQueryCache } from '../contexts/QueryCacheContext';
 
 const PAGE_SIZE = 10;
 const CLIENT_PAGE_SIZE = 10; // For client-side paginated lists
@@ -231,28 +232,32 @@ const SidebarItem = ({ label, icon, isActive, onClick, onDelete }: {
 export function Practice() {
     const { user, userInfo, loading: authLoading } = useAuth();
     const { metadata, loading: metadataLoading, questionCollectionPath, availableBranches, selectedBranch } = useMetadata();
+    const { getCachedData, setCachedData, getPersistentState, setPersistentState } = useQueryCache();
     const location = useLocation();
 
+    // Cache key based on branch
+    const CACHE_KEY = `practice_questions_${selectedBranch}`;
+
     // Filter and Sort State
-    const [searchQuery, setSearchQuery] = useState('');
-    const [questionTypeFilter, setQuestionTypeFilter] = useState<string>('all');
-    const [topicFilter, setTopicFilter] = useState<string>('all');
-    const [subjectFilter, setSubjectFilter] = useState<string>(location.state?.subject || 'all');
-    const [yearFilter, setYearFilter] = useState<string>('all');
-    const [tagFilter, setTagFilter] = useState<string>('all');
+    const [searchQuery, setSearchQuery] = useState(() => getPersistentState(`${CACHE_KEY}_search`) || '');
+    const [questionTypeFilter, setQuestionTypeFilter] = useState<string>(() => getPersistentState(`${CACHE_KEY}_type`) || 'all');
+    const [topicFilter, setTopicFilter] = useState<string>(() => getPersistentState(`${CACHE_KEY}_topic`) || 'all');
+    const [subjectFilter, setSubjectFilter] = useState<string>(() => getPersistentState(`${CACHE_KEY}_subject`) || location.state?.subject || 'all');
+    const [yearFilter, setYearFilter] = useState<string>(() => getPersistentState(`${CACHE_KEY}_year`) || 'all');
+    const [tagFilter, setTagFilter] = useState<string>(() => getPersistentState(`${CACHE_KEY}_tag`) || 'all');
     // --- *** NEW: Updated default sort order *** ---
-    const [sortOrder, setSortOrder] = useState<string>('qIndex-asc');
+    const [sortOrder, setSortOrder] = useState<string>(() => getPersistentState(`${CACHE_KEY}_sort`) || 'qIndex-asc');
 
     // List selection state
     const [selectedListId, setSelectedListId] = useState<string | null>(null);
     const [listQuestionIds, setListQuestionIds] = useState<string[]>([]);
 
     // Data State
-    const [questions, setQuestions] = useState<Question[]>([]);
+    const [questions, setQuestions] = useState<Question[]>(() => getCachedData<Question[]>(CACHE_KEY) || []);
     const [listQuestions, setListQuestions] = useState<Question[]>([]);
 
     const [submissions, setSubmissions] = useState<Submission[]>([]);
-    const [loadingData, setLoadingData] = useState(true);
+    const [loadingData, setLoadingData] = useState(() => !getCachedData(CACHE_KEY));
     const [loadingMore, setLoadingMore] = useState(false);
     const [queryError, setQueryError] = useState('');
 
@@ -267,6 +272,17 @@ export function Practice() {
     const years = useMemo(() => metadata?.years || [], [metadata]);
     const tags = useMemo(() => metadata?.tags || [], [metadata]);
     const baseTotalQuestions = useMemo(() => metadata?.questionCount || 0, [metadata]);
+
+    // Persistent state sync
+    useEffect(() => {
+        setPersistentState(`${CACHE_KEY}_search`, searchQuery);
+        setPersistentState(`${CACHE_KEY}_type`, questionTypeFilter);
+        setPersistentState(`${CACHE_KEY}_topic`, topicFilter);
+        setPersistentState(`${CACHE_KEY}_subject`, subjectFilter);
+        setPersistentState(`${CACHE_KEY}_year`, yearFilter);
+        setPersistentState(`${CACHE_KEY}_tag`, tagFilter);
+        setPersistentState(`${CACHE_KEY}_sort`, sortOrder);
+    }, [searchQuery, questionTypeFilter, topicFilter, subjectFilter, yearFilter, tagFilter, sortOrder, CACHE_KEY, setPersistentState]);
 
     const isAuthenticated = !!user && !!userInfo;
     const filtersDisabled = selectedListId !== null;
@@ -361,7 +377,9 @@ export function Practice() {
 
             const questionsData = documentSnapshots.docs.map(doc => ({ id: doc.id, ...doc.data() } as Question));
             console.log(`[Practice.LoadQuestions] SUCCESS: Received ${questionsData.length} documents.`);
-            setQuestions(direction === 'prev' ? questionsData.reverse() : questionsData);
+            const finalQuestions = direction === 'prev' ? questionsData.reverse() : questionsData;
+            setQuestions(finalQuestions);
+            setCachedData(CACHE_KEY, finalQuestions); // Cache for instant restore
 
             if (documentSnapshots.docs.length > 0) {
                 if (direction === 'prev') {

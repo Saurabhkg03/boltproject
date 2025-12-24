@@ -1,9 +1,16 @@
-import { Link, useLocation } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import { LayoutGrid, Target, Trophy, User } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import React from 'react';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
+import { PrefetchLink } from './PrefetchLink';
+
+// Prefetch triggers
+const prefetchHome = () => import('../pages/Home');
+const prefetchPractice = () => import('../pages/Practice');
+const prefetchLeaderboard = () => import('../pages/Leaderboard');
+const prefetchProfile = () => import('../pages/Profile');
 
 // Reusable Nav Link Component
 const BottomNavLink = ({ to, label, icon: Icon }: { to: string, label: string, icon: React.ElementType }) => {
@@ -12,8 +19,9 @@ const BottomNavLink = ({ to, label, icon: Icon }: { to: string, label: string, i
   const isActive = location.pathname === to || (to !== '/' && location.pathname.startsWith(to));
 
   return (
-    <Link
+    <PrefetchLink
       to={to}
+      onPrefetch={to === '/' ? prefetchHome : to === '/practice' ? prefetchPractice : to === '/leaderboard' ? prefetchLeaderboard : to.startsWith('/profile') ? prefetchProfile : undefined}
       className={cn(
         "relative flex flex-col items-center justify-center gap-1 h-full flex-1 min-w-[64px] rounded-2xl transition-colors duration-300 z-10",
         isActive
@@ -52,7 +60,7 @@ const BottomNavLink = ({ to, label, icon: Icon }: { to: string, label: string, i
       )}>
         {label}
       </span>
-    </Link>
+    </PrefetchLink>
   );
 };
 
