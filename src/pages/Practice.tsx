@@ -206,8 +206,8 @@ const SidebarItem = ({ label, icon, isActive, onClick, onDelete }: {
     <button
         onClick={onClick}
         className={`group w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${isActive
-                ? 'bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300'
-                : 'text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800'
+            ? 'bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300'
+            : 'text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800'
             }`}
     >
         <div className="flex items-center gap-3 min-w-0"> {/* Added min-w-0 */}
@@ -729,10 +729,10 @@ export function Practice() {
                 <div className="flex-1 min-w-0">
                     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
                         <div className="mb-8">
-                            <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
+                            <h1 className="text-3xl font-bold text-zinc-900 dark:text-white mb-2">
                                 Practice Questions ({branchName})
                             </h1>
-                            <p className="text-gray-600 dark:text-gray-400">
+                            <p className="text-zinc-600 dark:text-zinc-400">
                                 {loadingData ? 'Loading...' : (
                                     (totalQuestions > 0 || listMode) && !queryError
                                         ? listMode
@@ -745,45 +745,45 @@ export function Practice() {
                             </p>
                         </div>
 
-                        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4 md:p-6 mb-6 shadow-sm">
+                        <div className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 p-4 md:p-6 mb-6 shadow-sm">
                             <div className="flex flex-col gap-4">
                                 <div className="relative">
-                                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
+                                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-zinc-400 pointer-events-none" />
                                     <input
                                         type="text"
                                         placeholder="Search by number, title, subject..."
                                         value={searchQuery}
                                         onChange={(e) => setSearchQuery(e.target.value)}
-                                        className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                                        className="w-full pl-10 pr-4 py-2 border border-zinc-300 dark:border-zinc-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white"
                                     />
                                 </div>
 
                                 <div className="flex flex-wrap items-center gap-2 text-sm">
-                                    <Filter className="w-5 h-5 text-gray-400 flex-shrink-0 hidden sm:inline-block" />
+                                    <Filter className="w-5 h-5 text-zinc-400 flex-shrink-0 hidden sm:inline-block" />
 
-                                    <select disabled={filtersDisabled} value={questionTypeFilter} onChange={(e) => setQuestionTypeFilter(e.target.value)} className="w-full sm:w-auto px-2 py-1 border border-gray-300 dark:border-gray-700 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-white appearance-none cursor-pointer disabled:opacity-50 disabled:bg-gray-100 dark:disabled:bg-gray-800">
+                                    <select disabled={filtersDisabled} value={questionTypeFilter} onChange={(e) => setQuestionTypeFilter(e.target.value)} className="w-full sm:w-auto px-2 py-1 border border-zinc-300 dark:border-zinc-700 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white appearance-none cursor-pointer disabled:opacity-50 disabled:bg-zinc-100 dark:disabled:bg-zinc-800">
                                         <option value="all">Type</option>
                                         {(metadata?.questionTypeCounts ? Object.keys(metadata.questionTypeCounts) : ['mcq', 'msq', 'nat']).map((type: string) => (
                                             <option key={type} value={type}>{type.toUpperCase()}</option>
                                         ))}
                                     </select>
 
-                                    <select disabled={filtersDisabled} value={subjectFilter} onChange={(e) => setSubjectFilter(e.target.value)} className="w-full sm:w-auto px-2 py-1 border border-gray-300 dark:border-gray-700 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-white appearance-none cursor-pointer disabled:opacity-50 disabled:bg-gray-100 dark:disabled:bg-gray-800">
+                                    <select disabled={filtersDisabled} value={subjectFilter} onChange={(e) => setSubjectFilter(e.target.value)} className="w-full sm:w-auto px-2 py-1 border border-zinc-300 dark:border-zinc-700 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white appearance-none cursor-pointer disabled:opacity-50 disabled:bg-zinc-100 dark:disabled:bg-zinc-800">
                                         <option value="all">Subject</option>
                                         {subjects.map(subject => <option key={subject} value={subject}>{subject}</option>)}
                                     </select>
 
-                                    <select disabled={filtersDisabled} value={topicFilter} onChange={(e) => setTopicFilter(e.target.value)} className="w-full sm:w-auto px-2 py-1 border border-gray-300 dark:border-gray-700 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-white appearance-none cursor-pointer disabled:opacity-50 disabled:bg-gray-100 dark:disabled:bg-gray-800">
+                                    <select disabled={filtersDisabled} value={topicFilter} onChange={(e) => setTopicFilter(e.target.value)} className="w-full sm:w-auto px-2 py-1 border border-zinc-300 dark:border-zinc-700 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white appearance-none cursor-pointer disabled:opacity-50 disabled:bg-zinc-100 dark:disabled:bg-zinc-800">
                                         <option value="all">Topic</option>
                                         {topics.map(topic => <option key={topic} value={topic}>{topic}</option>)}
                                     </select>
 
-                                    <select disabled={filtersDisabled} value={yearFilter} onChange={(e) => setYearFilter(e.target.value)} className="w-full sm:w-auto px-2 py-1 border border-gray-300 dark:border-gray-700 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-white appearance-none cursor-pointer disabled:opacity-50 disabled:bg-gray-100 dark:disabled:bg-gray-800">
+                                    <select disabled={filtersDisabled} value={yearFilter} onChange={(e) => setYearFilter(e.target.value)} className="w-full sm:w-auto px-2 py-1 border border-zinc-300 dark:border-zinc-700 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white appearance-none cursor-pointer disabled:opacity-50 disabled:bg-zinc-100 dark:disabled:bg-zinc-800">
                                         <option value="all">Year</option>
                                         {years.map(year => <option key={year} value={year}>{year}</option>)}
                                     </select>
 
-                                    <select disabled={filtersDisabled} value={tagFilter} onChange={(e) => setTagFilter(e.target.value)} className="w-full sm:w-auto px-2 py-1 border border-gray-300 dark:border-gray-700 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-white appearance-none cursor-pointer disabled:opacity-50 disabled:bg-gray-100 dark:disabled:bg-gray-800">
+                                    <select disabled={filtersDisabled} value={tagFilter} onChange={(e) => setTagFilter(e.target.value)} className="w-full sm:w-auto px-2 py-1 border border-zinc-300 dark:border-zinc-700 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white appearance-none cursor-pointer disabled:opacity-50 disabled:bg-zinc-100 dark:disabled:bg-zinc-800">
                                         <option value="all">Tag</option>
                                         {tags.map(tag => <option key={tag} value={tag}>{tag}</option>)}
                                     </select>
@@ -792,15 +792,15 @@ export function Practice() {
 
                                     {/* --- *** NEW: Updated Sort Options *** --- */}
                                     <div className="flex items-center gap-2 mt-2 sm:mt-0 w-full sm:w-auto">
-                                        <ArrowDownUp className="w-5 h-5 text-gray-400 flex-shrink-0" />
-                                        <select value={sortOrder} onChange={(e) => setSortOrder(e.target.value)} className="w-full sm:w-auto px-2 py-1 border border-gray-300 dark:border-gray-700 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-white appearance-none cursor-pointer">
+                                        <ArrowDownUp className="w-5 h-5 text-zinc-400 flex-shrink-0" />
+                                        <select value={sortOrder} onChange={(e) => setSortOrder(e.target.value)} className="w-full sm:w-auto px-2 py-1 border border-zinc-300 dark:border-zinc-700 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white appearance-none cursor-pointer">
                                             <option value="qIndex-asc">Sort: Number ↑</option>
                                             <option value="qIndex-desc">Sort: Number ↓</option>
                                             <option value="year-desc">Year ↓</option>
                                             <option value="year-asc">Year ↑</option>
                                         </select>
                                     </div>
-                                    <button onClick={handleResetFilters} className="flex items-center gap-1 px-2 py-1 border border-gray-300 dark:border-gray-700 rounded-md text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors w-full sm:w-auto mt-2 sm:mt-0 justify-center" title="Reset Filters">
+                                    <button onClick={handleResetFilters} className="flex items-center gap-1 px-2 py-1 border border-zinc-300 dark:border-zinc-700 rounded-md text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors w-full sm:w-auto mt-2 sm:mt-0 justify-center" title="Reset Filters">
                                         <RotateCcw className="w-4 h-4" />
                                         <span className="sm:hidden">Reset</span>
                                     </button>
@@ -815,11 +815,11 @@ export function Practice() {
                             </div>
                         )}
 
-                        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden relative shadow-sm">
+                        <div className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 overflow-hidden relative shadow-sm">
                             {(loadingData && !authLoading && !metadataLoading)}
 
                             {/* Mobile View */}
-                            <div className="divide-y divide-gray-200 dark:divide-gray-800 md:hidden">
+                            <div className="divide-y divide-zinc-200 dark:divide-zinc-800 md:hidden">
                                 {questionsToDisplay.map((question) => {
                                     const isSolved = solvedQuestionIds.has(question.id);
                                     return (
@@ -827,7 +827,7 @@ export function Practice() {
                                             <Link to={`/question/${question.id}`} className="block mb-1">
                                                 <span className="text-blue-600 dark:text-blue-400 font-medium text-base truncate">
                                                     {/* --- *** NEW: Show qIndex *** --- */}
-                                                    <span className="text-sm text-gray-500 dark:text-gray-400 font-normal mr-2">#{question.qIndex}</span>
+                                                    <span className="text-sm text-zinc-500 dark:text-zinc-400 font-normal mr-2">#{question.qIndex}</span>
                                                     {question.title || `Question ${question.id.substring(0, 4)}...`}
                                                 </span>
                                             </Link>
@@ -835,9 +835,9 @@ export function Practice() {
                                                 {isSolved ? (
                                                     <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" />
                                                 ) : (
-                                                    <Circle className="w-4 h-4 text-gray-300 dark:text-gray-700 flex-shrink-0" />
+                                                    <Circle className="w-4 h-4 text-zinc-300 dark:text-zinc-700 flex-shrink-0" />
                                                 )}
-                                                <span className="text-xs text-gray-500 dark:text-gray-400">
+                                                <span className="text-xs text-zinc-500 dark:text-zinc-400">
                                                     {isSolved ? 'Solved' : 'Not Solved'}
                                                 </span>
                                             </div>
@@ -845,10 +845,10 @@ export function Practice() {
                                                 <span className={`px-2 py-0.5 rounded-full font-medium uppercase ${getQuestionTypeColor(question.question_type)}`}>
                                                     {question.question_type || 'N/A'}
                                                 </span>
-                                                <span className="px-2 py-0.5 bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-200 rounded font-medium">
+                                                <span className="px-2 py-0.5 bg-zinc-100 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-200 rounded font-medium border border-zinc-200 dark:border-zinc-700">
                                                     {question.subject || 'N/A'}
                                                 </span>
-                                                <span className="px-2 py-0.5 bg-gray-100 dark:bg-gray-700/50 text-gray-700 dark:text-gray-300 rounded">
+                                                <span className="px-2 py-0.5 bg-zinc-100 dark:bg-zinc-700/50 text-zinc-700 dark:text-zinc-300 rounded">
                                                     {question.year || '?'}
                                                 </span>
                                                 {(userInfo?.role === 'admin' || userInfo?.role === 'moderator') && (
@@ -871,33 +871,33 @@ export function Practice() {
 
                             {/* Desktop View */}
                             <div className="hidden md:block overflow-x-auto">
-                                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-800">
-                                    <thead className="bg-gray-50 dark:bg-gray-800">
+                                <table className="min-w-full divide-y divide-zinc-200 dark:divide-zinc-800">
+                                    <thead className="bg-zinc-50 dark:bg-zinc-800">
                                         <tr>
-                                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap">Status</th>
+                                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider whitespace-nowrap">Status</th>
                                             {/* --- *** NEW: Added Q.No. *** --- */}
-                                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap">Q.No.</th>
-                                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap">Title</th>
-                                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap">Topic</th>
-                                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap">Type</th>
-                                            {(userInfo?.role === 'admin' || userInfo?.role === 'moderator') && <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap">Verified</th>}
-                                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap">Details</th>
-                                            {(userInfo?.role === 'admin' || userInfo?.role === 'moderator') && <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap">Actions</th>}
+                                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider whitespace-nowrap">Q.No.</th>
+                                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider whitespace-nowrap">Title</th>
+                                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider whitespace-nowrap">Topic</th>
+                                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider whitespace-nowrap">Type</th>
+                                            {(userInfo?.role === 'admin' || userInfo?.role === 'moderator') && <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider whitespace-nowrap">Verified</th>}
+                                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider whitespace-nowrap">Details</th>
+                                            {(userInfo?.role === 'admin' || userInfo?.role === 'moderator') && <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider whitespace-nowrap">Actions</th>}
                                         </tr>
                                     </thead>
-                                    <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
+                                    <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
                                         {questionsToDisplay.map((question) => {
                                             const isSolved = solvedQuestionIds.has(question.id);
                                             return (
-                                                <tr key={question.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
-                                                    <td className="px-6 py-4 whitespace-nowrap text-center">{isSolved ? <CheckCircle className="w-5 h-5 text-green-500 inline-block" /> : <Circle className="w-5 h-5 text-gray-300 dark:text-gray-700 inline-block" />}</td>
+                                                <tr key={question.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors">
+                                                    <td className="px-6 py-4 whitespace-nowrap text-center">{isSolved ? <CheckCircle className="w-5 h-5 text-green-500 inline-block" /> : <Circle className="w-5 h-5 text-zinc-300 dark:text-zinc-700 inline-block" />}</td>
                                                     {/* --- *** NEW: Show qIndex *** --- */}
-                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{question.qIndex}</td>
+                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-zinc-500 dark:text-zinc-400">{question.qIndex}</td>
                                                     <td className="px-6 py-4 whitespace-nowrap"><Link to={`/question/${question.id}`} className="text-blue-600 dark:text-blue-400 hover:underline font-medium text-sm">{question.title || `Question ${question.id.substring(0, 4)}...`}</Link></td>
-                                                    <td className="px-6 py-4 whitespace-nowrap"><span className="text-gray-900 dark:text-white text-sm">{question.topic || 'N/A'}</span></td>
+                                                    <td className="px-6 py-4 whitespace-nowrap"><span className="text-zinc-900 dark:text-white text-sm">{question.topic || 'N/A'}</span></td>
                                                     <td className="px-6 py-4 whitespace-nowrap"><span className={`px-3 py-1 rounded-full text-xs font-medium uppercase ${getQuestionTypeColor(question.question_type)}`}>{question.question_type || 'N/A'}</span></td>
                                                     {(userInfo?.role === 'admin' || userInfo?.role === 'moderator') && <td className="px-6 py-4 whitespace-nowrap"><span className={`px-3 py-1 rounded-full text-xs font-medium ${question.verified ? 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-200' : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-200'}`}>{question.verified ? 'Yes' : 'No'}</span></td>}
-                                                    <td className="px-6 py-4 whitespace-nowrap"><div className="flex flex-wrap gap-1"><span className="px-2 py-1 bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-200 rounded text-xs font-medium">{question.subject || 'N/A'}</span><span className="px-2 py-1 bg-gray-100 dark:bg-gray-700/50 text-gray-700 dark:text-gray-300 rounded text-xs">{question.year || '?'}</span></div></td>
+                                                    <td className="px-6 py-4 whitespace-nowrap"><div className="flex flex-wrap gap-1"><span className="px-2 py-1 bg-zinc-100 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-200 border border-zinc-200 dark:border-zinc-700 rounded text-xs font-medium">{question.subject || 'N/A'}</span><span className="px-2 py-1 bg-zinc-100 dark:bg-zinc-700/50 text-zinc-700 dark:text-zinc-300 rounded text-xs">{question.year || '?'}</span></div></td>
                                                     {(userInfo?.role === 'admin' || userInfo?.role === 'moderator') && <td className="px-6 py-4 whitespace-nowrap"><Link to={`/edit-question/${question.id}`} className="text-blue-600 hover:text-blue-900 flex items-center gap-1 text-sm font-medium"><Edit className="w-4 h-4" /> Edit</Link></td>}
                                                 </tr>
                                             );
@@ -909,7 +909,7 @@ export function Practice() {
 
                         {questionsToDisplay.length === 0 && !loadingData && !queryError && (
                             <div className="text-center py-12">
-                                <p className="text-gray-500 dark:text-gray-400">
+                                <p className="text-zinc-500 dark:text-zinc-400">
                                     No questions found matching your criteria.
                                 </p>
                             </div>
@@ -921,12 +921,12 @@ export function Practice() {
                                 <button
                                     onClick={listMode ? handleClientPrevPage : handlePrevPage}
                                     disabled={currentPage === 1 || loadingMore || loadingData}
-                                    className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-zinc-700 bg-white border border-zinc-300 rounded-md hover:bg-zinc-50 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-600 dark:hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     <ChevronLeft className="w-4 h-4" /> Previous
                                 </button>
 
-                                <span className="text-sm text-gray-700 dark:text-gray-400 order-first sm:order-none">
+                                <span className="text-sm text-zinc-700 dark:text-zinc-400 order-first sm:order-none">
                                     Page {currentPage} {(listMode && totalPages > 1) ? `of ${totalPages}` :
                                         (!listMode && totalPages > 1 && !filtersAreActive) ? `of ${totalPages}` : ''}
                                 </span>
@@ -939,7 +939,7 @@ export function Practice() {
                                         (!listMode && !filtersAreActive && currentPage === totalPages) ||
                                         (!listMode && filtersAreActive && questionsToDisplay.length < PAGE_SIZE && !lastVisible)
                                     }
-                                    className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-zinc-700 bg-white border border-zinc-300 rounded-md hover:bg-zinc-50 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-600 dark:hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     Next <ChevronRight className="w-4 h-4" />
                                 </button>

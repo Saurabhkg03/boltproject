@@ -17,14 +17,14 @@ const BottomNavLink = ({ to, label, icon: Icon }: { to: string, label: string, i
       className={cn(
         "relative flex flex-col items-center justify-center gap-1 h-full flex-1 min-w-[64px] rounded-2xl transition-colors duration-300 z-10",
         isActive
-          ? "text-blue-600 dark:text-blue-400"
+          ? "text-zinc-900 dark:text-white"
           : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200"
       )}
     >
       {isActive && (
         <motion.div
           layoutId="bottom-nav-active"
-          className="absolute inset-0 bg-blue-100/50 dark:bg-blue-900/30 rounded-2xl -z-10"
+          className="absolute inset-0 bg-zinc-100 dark:bg-zinc-800 rounded-2xl -z-10"
           transition={{ type: "spring", stiffness: 300, damping: 30 }}
         />
       )}

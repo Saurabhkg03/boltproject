@@ -56,7 +56,7 @@ const BranchSelector = () => {
             onClick={() => setSelectedBranch(key)}
             className={cn(
               "cursor-pointer",
-              selectedBranch === key && "bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400"
+              selectedBranch === key && "bg-zinc-100 dark:bg-zinc-800 text-blue-600 dark:text-zinc-100"
             )}
           >
             {name}
@@ -77,13 +77,13 @@ const NavLinkItem = ({ to, label, icon }: { to: string, label: string, icon?: Re
       to={to}
       className={cn(
         "relative flex items-center gap-2 px-3 py-1.5 text-sm font-medium transition-colors rounded-full z-10",
-        isActive ? "text-blue-600 dark:text-blue-300" : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100"
+        isActive ? "text-zinc-900 dark:text-white" : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100"
       )}
     >
       {isActive && (
         <motion.span
           layoutId="nav-pill"
-          className="absolute inset-0 bg-blue-100 dark:bg-blue-900/40 rounded-full -z-10"
+          className="absolute inset-0 bg-zinc-200 dark:bg-zinc-800 rounded-full -z-10"
           transition={{ type: "spring", stiffness: 300, damping: 30 }}
         />
       )}
