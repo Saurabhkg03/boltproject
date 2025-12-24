@@ -65,7 +65,7 @@ export function BottomNavbar() {
     : '/login'; // Send to login if not authenticated
 
   return (
-    <div className="fixed bottom-6 left-0 right-0 z-50 flex justify-center px-4 pointer-events-none md:hidden">
+    <div className="fixed bottom-3 left-0 right-0 z-50 flex justify-center px-4 pointer-events-none md:hidden">
       <nav className="flex items-center justify-between p-2 bg-white/90 dark:bg-zinc-900/90 backdrop-blur-2xl border border-white/20 dark:border-zinc-800/50 rounded-full shadow-xl shadow-zinc-200/50 dark:shadow-black/50 ring-1 ring-black/5 dark:ring-white/10 pointer-events-auto max-w-sm w-full h-16">
         <BottomNavLink to="/" label="Home" icon={LayoutGrid} />
         <BottomNavLink to="/practice" label="Practice" icon={Target} />

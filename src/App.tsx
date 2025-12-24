@@ -20,6 +20,7 @@ import { NotFound } from './pages/NotFound';
 
 import { AnimatePresence } from 'framer-motion';
 import { PageTransition } from './components/PageTransition';
+import { ScrollToTop } from './components/ScrollToTop';
 
 const AppContent = () => {
   const { userInfo, loading, isAuthenticated } = useAuth();
@@ -127,6 +128,7 @@ function App() {
           <MetadataProvider>
             <DailyChallengeProvider>
               <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950">
+                <ScrollToTop />
                 <AppContent />
               </div>
             </DailyChallengeProvider>

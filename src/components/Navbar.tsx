@@ -107,8 +107,7 @@ export function Navbar() {
           {/* Logo */}
           <Link to="/" className="flex items-center gap-2 font-bold text-zinc-900 dark:text-white shrink-0">
             <img src="/logo.png" alt="GATECode Logo" className="w-8 h-8 rounded-lg" />
-            <span className="text-xl tracking-tight hidden sm:inline-block">GATECode</span>
-            <span className="text-xl tracking-tight sm:hidden">GC</span>
+            <span className="text-xl tracking-tight">GATECode</span>
           </Link>
 
           {/* Desktop Navigation */}
@@ -129,7 +128,7 @@ export function Navbar() {
               variant="ghost"
               size="icon"
               onClick={toggleTheme}
-              className="rounded-full w-9 h-9 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200/50 dark:hover:bg-zinc-800/50"
+              className="rounded-full w-9 h-9 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200/50 dark:hover:bg-zinc-800/50 hidden md:flex"
               aria-label="Toggle theme"
             >
               {theme === 'light' ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
