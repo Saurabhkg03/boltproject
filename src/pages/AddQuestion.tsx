@@ -323,3 +323,5 @@ export function AddQuestion() {
     </div>
   );
 }
+  
+export default AddQuestion; 

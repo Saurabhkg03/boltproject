@@ -205,8 +205,8 @@ export function Home() {
                 to="/practice"
                 state={{ subject: subject.name }} // Pass subject to Practice page
                 className={`glass-card p-6 transition-all duration-300 group ${subject.count > 0
-                    ? 'hover:shadow-xl hover:-translate-y-1'
-                    : 'opacity-60 cursor-not-allowed'
+                  ? 'hover:shadow-xl hover:-translate-y-1'
+                  : 'opacity-60 cursor-not-allowed'
                   }`}
                 onClick={(e) => { if (subject.count === 0) e.preventDefault(); }}
               >
@@ -267,9 +267,9 @@ export function Home() {
               leaderboardPreview.map((leader, index) => (
                 <div key={leader.uid} className="flex items-center gap-4">
                   <div className={`w-8 h-8 flex items-center justify-center rounded-full font-bold text-sm ${index === 0 ? 'bg-yellow-400 text-white' :
-                      index === 1 ? 'bg-zinc-400 text-white' :
-                        index === 2 ? 'bg-orange-500 text-white' :
-                          'bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300'
+                    index === 1 ? 'bg-zinc-400 text-white' :
+                      index === 2 ? 'bg-orange-500 text-white' :
+                        'bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300'
                     }`}>
                     {index + 1}
                   </div>
@@ -315,3 +315,5 @@ export function Home() {
     </div>
   );
 }
+
+export default Home;

@@ -15,15 +15,15 @@ import { PageTransition } from './components/PageTransition';
 import { ScrollToTop } from './components/ScrollToTop';
 
 // --- OPTIMIZATION: Route-based Code Splitting (Next.js style) ---
-const Home = lazy(() => import('./pages/Home').then(m => ({ default: m.Home })));
-const Practice = lazy(() => import('./pages/Practice').then(m => ({ default: m.Practice })));
-const QuestionDetail = lazy(() => import('./pages/QuestionDetail').then(m => ({ default: m.QuestionDetail })));
-const Leaderboard = lazy(() => import('./pages/Leaderboard').then(m => ({ default: m.Leaderboard })));
-const Profile = lazy(() => import('./pages/Profile').then(m => ({ default: m.Profile })));
-const Login = lazy(() => import('./pages/Login').then(m => ({ default: m.Login })));
-const AdminPanel = lazy(() => import('./pages/AdminPanel').then(m => ({ default: m.AdminPanel })));
-const AddQuestion = lazy(() => import('./pages/AddQuestion').then(m => ({ default: m.AddQuestion })));
-const Settings = lazy(() => import('./pages/Settings').then(m => ({ default: m.Settings })));
+const Home = lazy(() => import('./pages/Home'));
+const Practice = lazy(() => import('./pages/Practice'));
+const QuestionDetail = lazy(() => import('./pages/QuestionDetail'));
+const Leaderboard = lazy(() => import('./pages/Leaderboard'));
+const Profile = lazy(() => import('./pages/Profile'));
+const Login = lazy(() => import('./pages/Login'));
+const AdminPanel = lazy(() => import('./pages/AdminPanel'));
+const AddQuestion = lazy(() => import('./pages/AddQuestion'));
+const Settings = lazy(() => import('./pages/Settings'));
 
 // Loading component for Suspense
 const PageLoader = () => (

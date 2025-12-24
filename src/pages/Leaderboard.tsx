@@ -377,3 +377,5 @@ export function Leaderboard() {
   );
 }
 
+  
+export default Leaderboard; 
