@@ -118,7 +118,7 @@ export function Navbar() {
         <div className="flex justify-between items-center h-16 gap-2">
           {/* Logo */}
           <PrefetchLink to="/" onPrefetch={prefetchHome} className="flex items-center gap-2 font-bold text-zinc-900 dark:text-white shrink-0">
-            <img src="/logo.png" alt="GATECode Logo" className="w-8 h-8 rounded-lg" />
+            <img src="/logo.png" alt="GATECode Logo" loading="lazy" className="w-8 h-8 rounded-lg" />
             <span className="text-xl tracking-tight">GATECode</span>
           </PrefetchLink>
 
@@ -170,6 +170,7 @@ export function Navbar() {
                     <img
                       src={userInfo.avatar || '/user.png'}
                       alt={userInfo.name}
+                      loading="lazy"
                       className="w-full h-full object-cover"
                     />
                   </Button>

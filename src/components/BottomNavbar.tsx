@@ -1,7 +1,7 @@
 import { useLocation } from 'react-router-dom';
 import { LayoutGrid, Target, Trophy, User } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
-import React from 'react';
+import React, { memo } from 'react';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { PrefetchLink } from './PrefetchLink';
@@ -12,8 +12,8 @@ const prefetchPractice = () => import('../pages/Practice');
 const prefetchLeaderboard = () => import('../pages/Leaderboard');
 const prefetchProfile = () => import('../pages/Profile');
 
-// Reusable Nav Link Component
-const BottomNavLink = ({ to, label, icon: Icon }: { to: string, label: string, icon: React.ElementType }) => {
+// Reusable Nav Link Component - Memoized for performance
+const BottomNavLink = memo(({ to, label, icon: Icon }: { to: string, label: string, icon: React.ElementType }) => {
   const location = useLocation();
   // Match base path, so /profile/username matches /profile
   const isActive = location.pathname === to || (to !== '/' && location.pathname.startsWith(to));
@@ -62,9 +62,12 @@ const BottomNavLink = ({ to, label, icon: Icon }: { to: string, label: string, i
       </span>
     </PrefetchLink>
   );
-};
+});
 
-export function BottomNavbar() {
+BottomNavLink.displayName = 'BottomNavLink';
+
+// Memoized BottomNavbar export for better performance
+export const BottomNavbar = memo(function BottomNavbar() {
   const { userInfo, isAuthenticated } = useAuth();
 
   // Determine profile link
@@ -82,4 +85,4 @@ export function BottomNavbar() {
       </nav>
     </div>
   );
-}
+});

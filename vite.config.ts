@@ -16,4 +16,20 @@ export default defineConfig({
     include: ['react', 'react-dom'],
     exclude: ['lucide-react'],
   },
+  build: {
+    // Code splitting for better caching
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'react-vendor': ['react', 'react-dom', 'react-router-dom'],
+          'firebase-vendor': ['firebase/app', 'firebase/auth', 'firebase/firestore', 'firebase/storage'],
+          'ui-vendor': ['framer-motion', 'lucide-react'],
+        }
+      }
+    },
+    // Minification for production
+    minify: 'terser',
+    chunkSizeWarningLimit: 1000,
+    sourcemap: false,
+  }
 });
