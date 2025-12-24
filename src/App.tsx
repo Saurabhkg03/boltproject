@@ -26,24 +26,6 @@ const AppContent = () => {
   const { userInfo, loading, isAuthenticated } = useAuth();
   const location = useLocation();
 
-  useEffect(() => {
-    if (!loading) {
-      const loader = document.getElementById('loader-wrapper');
-      if (loader) {
-        loader.classList.add('hidden');
-        setTimeout(() => {
-          if (loader) {
-            loader.style.display = 'none';
-          }
-        }, 500);
-      }
-    }
-  }, [loading]);
-
-  if (loading) {
-    return null;
-  }
-
   if (isAuthenticated && userInfo && userInfo.needsSetup && location.pathname !== '/settings') {
     return <Navigate to="/settings" state={{ from: location }} replace />;
   }
