@@ -3,13 +3,14 @@ import { useNavigate, Link } from 'react-router-dom';
 import { ArrowLeft, Save, Trash2, Camera, AlertTriangle, Loader2 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { updateProfile } from 'firebase/auth';
+import { SettingsSkeleton } from '@/components/Skeletons';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 export function Settings() {
     const navigate = useNavigate();
-    const { user, userInfo, setUserInfo, deleteAccount } = useAuth();
+    const { user, userInfo, setUserInfo, deleteAccount, loading: loadingAuth } = useAuth();
 
     const [displayName, setDisplayName] = useState(userInfo?.name || '');
     const [username, setUsername] = useState(userInfo?.username || '');
@@ -94,6 +95,10 @@ export function Settings() {
             setDeleting(false);
         }
     };
+
+    if (loadingAuth || !userInfo) {
+        return <SettingsSkeleton />;
+    }
 
     return (
         <div className="min-h-screen bg-zinc-50 dark:bg-black p-4 md:p-8">

@@ -7,6 +7,7 @@ import { db } from '../firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { Question, Submission, UserQuestionData, QuestionList, UserStats, UserStreakData, User } from '../data/mockData';
 import { useMetadata } from '../contexts/MetadataContext';
+import { QuestionDetailSkeleton } from '../components/Skeletons';
 
 declare global {
   interface Window {
@@ -727,11 +728,7 @@ export function QuestionDetail() {
   };
 
   if (loadingData || metadataLoading || loadingAuth) {
-    return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex items-center justify-center">
-        <Loader2 className="w-12 h-12 text-blue-600 animate-spin" />
-      </div>
-    );
+    return <QuestionDetailSkeleton />;
   }
 
   if (!question) {
